@@ -26,6 +26,8 @@
 		A1000014 /* IncrementalTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000015 /* IncrementalTTSManager.swift */; };
 		A1000015 /* ProcessingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016 /* ProcessingIndicatorView.swift */; };
 		A1000016 /* OfflineBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000017 /* OfflineBannerView.swift */; };
+		A1000017 /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; };
+		A1000018 /* KokoroTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000018 /* KokoroTTSManager.swift */; };
 		A1000019 /* TextInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000019 /* TextInputBar.swift */; };
 		A100001A /* CollapsibleToolCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001A /* CollapsibleToolCallView.swift */; };
 		A100001B /* MessagePersistenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001B /* MessagePersistenceManager.swift */; };
@@ -33,6 +35,14 @@
 		A100001D /* TTSTextNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001D /* TTSTextNormalizer.swift */; };
 		A100001E /* ImageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001E /* ImageAttachment.swift */; };
 		A100001F /* ImageAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001F /* ImageAttachmentStore.swift */; };
+		A1000020 /* af_heart.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000020 /* af_heart.safetensors */; };
+		A1000021 /* af_nova.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000021 /* af_nova.safetensors */; };
+		A1000022 /* af_bella.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000022 /* af_bella.safetensors */; };
+		A1000023 /* af_sarah.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000023 /* af_sarah.safetensors */; };
+		A1000024 /* am_adam.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000024 /* am_adam.safetensors */; };
+		A1000025 /* am_michael.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000025 /* am_michael.safetensors */; };
+		A1000026 /* bf_emma.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000026 /* bf_emma.safetensors */; };
+		A1000027 /* bm_george.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000027 /* bm_george.safetensors */; };
 		A1000030 /* ImagePickerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000030 /* ImagePickerCoordinator.swift */; };
 		A1000031 /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000031 /* CameraView.swift */; };
 		A1000032 /* PermissionAlertModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000032 /* PermissionAlertModifier.swift */; };
@@ -52,21 +62,12 @@
 		A1000043 /* CameraFlashOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000043 /* CameraFlashOverlay.swift */; };
 		A1000044 /* LocationCapabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000044 /* LocationCapabilityService.swift */; };
 		A1000046 /* ConnectionTestingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000046 /* ConnectionTestingService.swift */; };
-		A1000017 /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; };
-		A1000018 /* KokoroTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000018 /* KokoroTTSManager.swift */; };
-		A1000020 /* af_heart.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000020 /* af_heart.safetensors */; };
-		A1000021 /* af_nova.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000021 /* af_nova.safetensors */; };
-		A1000022 /* af_bella.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000022 /* af_bella.safetensors */; };
-		A1000023 /* af_sarah.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000023 /* af_sarah.safetensors */; };
-		A1000024 /* am_adam.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000024 /* am_adam.safetensors */; };
-		A1000025 /* am_michael.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000025 /* am_michael.safetensors */; };
-		A1000026 /* bf_emma.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000026 /* bf_emma.safetensors */; };
-		A1000027 /* bm_george.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000027 /* bm_george.safetensors */; };
-		A10000E1 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A1000048 /* DeviceIdentityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000048 /* DeviceIdentityStore.swift */; };
 		A1000049 /* DeviceAuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000049 /* DeviceAuthStore.swift */; };
 		A100004B /* GatewayConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004B /* GatewayConnection.swift */; };
 		A100004C /* GatewayDualConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004C /* GatewayDualConnectionManager.swift */; };
+		A100004D /* ElevenLabsTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004D /* ElevenLabsTTSManager.swift */; };
+		A10000E1 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -105,6 +106,13 @@
 		A2000016 /* ProcessingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingIndicatorView.swift; sourceTree = "<group>"; };
 		A2000017 /* OfflineBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineBannerView.swift; sourceTree = "<group>"; };
 		A2000018 /* KokoroTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroTTSManager.swift; sourceTree = "<group>"; };
+		A2000019 /* TextInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputBar.swift; sourceTree = "<group>"; };
+		A200001A /* CollapsibleToolCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapsibleToolCallView.swift; sourceTree = "<group>"; };
+		A200001B /* MessagePersistenceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagePersistenceManager.swift; sourceTree = "<group>"; };
+		A200001C /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
+		A200001D /* TTSTextNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSTextNormalizer.swift; sourceTree = "<group>"; };
+		A200001E /* ImageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAttachment.swift; sourceTree = "<group>"; };
+		A200001F /* ImageAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAttachmentStore.swift; sourceTree = "<group>"; };
 		A2000020 /* af_heart.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = af_heart.safetensors; sourceTree = "<group>"; };
 		A2000021 /* af_nova.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = af_nova.safetensors; sourceTree = "<group>"; };
 		A2000022 /* af_bella.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = af_bella.safetensors; sourceTree = "<group>"; };
@@ -113,13 +121,6 @@
 		A2000025 /* am_michael.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = am_michael.safetensors; sourceTree = "<group>"; };
 		A2000026 /* bf_emma.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = bf_emma.safetensors; sourceTree = "<group>"; };
 		A2000027 /* bm_george.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = bm_george.safetensors; sourceTree = "<group>"; };
-		A2000019 /* TextInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputBar.swift; sourceTree = "<group>"; };
-		A200001A /* CollapsibleToolCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollapsibleToolCallView.swift; sourceTree = "<group>"; };
-		A200001B /* MessagePersistenceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagePersistenceManager.swift; sourceTree = "<group>"; };
-		A200001C /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
-		A200001D /* TTSTextNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSTextNormalizer.swift; sourceTree = "<group>"; };
-		A200001E /* ImageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAttachment.swift; sourceTree = "<group>"; };
-		A200001F /* ImageAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAttachmentStore.swift; sourceTree = "<group>"; };
 		A2000030 /* ImagePickerCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePickerCoordinator.swift; sourceTree = "<group>"; };
 		A2000031 /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
 		A2000032 /* PermissionAlertModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionAlertModifier.swift; sourceTree = "<group>"; };
@@ -143,6 +144,7 @@
 		A2000049 /* DeviceAuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceAuthStore.swift; sourceTree = "<group>"; };
 		A200004B /* GatewayConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayConnection.swift; sourceTree = "<group>"; };
 		A200004C /* GatewayDualConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayDualConnectionManager.swift; sourceTree = "<group>"; };
+		A200004D /* ElevenLabsTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsTTSManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -201,6 +203,7 @@
 				A2000010 /* BackgroundAudioManager.swift */,
 				A2000042 /* CameraCapabilityService.swift */,
 				A2000044 /* LocationCapabilityService.swift */,
+				A200004D /* ElevenLabsTTSManager.swift */,
 				A200003C /* GatewayProtocolTypes.swift */,
 				A200003E /* GatewayChatClient.swift */,
 				A2000046 /* ConnectionTestingService.swift */,
@@ -428,6 +431,7 @@
 				A1000049 /* DeviceAuthStore.swift in Sources */,
 				A100004B /* GatewayConnection.swift in Sources */,
 				A100004C /* GatewayDualConnectionManager.swift in Sources */,
+				A100004D /* ElevenLabsTTSManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -563,7 +567,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Clawdy/Preview Content\"";
-				DEVELOPMENT_TEAM = 489X42LS56;
+				DEVELOPMENT_TEAM = CHA3FP8ENJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Clawdy/Info.plist;
@@ -599,7 +603,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Clawdy/Preview Content\"";
-				DEVELOPMENT_TEAM = 489X42LS56;
+				DEVELOPMENT_TEAM = CHA3FP8ENJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Clawdy/Info.plist;

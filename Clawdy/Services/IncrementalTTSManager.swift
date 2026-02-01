@@ -210,26 +210,41 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     /// Flush any remaining buffered text and speak it.
     /// Call this when the stream is complete.
     func flush() {
-        // Flush any pending clause first (merge with remaining buffer if possible)
+        print("[TTS Flush] Called - codeMarkerBuffer: '\(codeMarkerBuffer)', sentenceBuffer: '\(sentenceBuffer.suffix(50))', pendingClause: '\(pendingClause ?? "nil")'")
+
+        // First, flush any text stuck in the code marker buffer
+        // (handles case where stream ends with incomplete backticks)
+        if !codeMarkerBuffer.isEmpty {
+            sentenceBuffer += codeMarkerBuffer
+            codeMarkerBuffer = ""
+        }
+
+        // Collect all remaining text
+        var allRemaining = ""
+
+        // Add pending clause if exists
         if let pending = pendingClause {
-            let remaining = sentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !remaining.isEmpty {
-                // Merge pending clause with remaining buffer
-                enqueueSentence(pending + " " + remaining)
-            } else {
-                // No remaining text, just speak the pending clause
-                enqueueSentence(pending)
-            }
+            allRemaining = pending
             pendingClause = nil
-            sentenceBuffer = ""
-            return
         }
-        
-        // Trim and speak any remaining content
-        let remaining = sentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !remaining.isEmpty {
-            enqueueSentence(remaining)
+
+        // Add any remaining sentence buffer
+        let bufferRemaining = sentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !bufferRemaining.isEmpty {
+            if !allRemaining.isEmpty {
+                allRemaining += " " + bufferRemaining
+            } else {
+                allRemaining = bufferRemaining
+            }
         }
+
+        print("[TTS Flush] Final text to speak: '\(allRemaining)'")
+
+        // Speak all remaining text if any
+        if !allRemaining.isEmpty {
+            enqueueSentence(allRemaining)
+        }
+
         sentenceBuffer = ""
     }
     
@@ -550,15 +565,17 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     private func enqueueSentence(_ sentence: String) {
         let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        
+
         // Normalize technical content for natural speech rendering.
         // This transforms file paths, URLs, inline code, and environment variables
         // into human-friendly spoken forms before queueing for TTS.
         let normalized = TTSTextNormalizer.normalize(trimmed)
-        
+
+        print("[TTS Enqueue] Adding to queue: '\(normalized.prefix(60))...' (queue size: \(speechQueue.count + 1))")
+
         speechQueue.append(normalized)
         updateState()
-        
+
         // Start speaking if not already
         if !currentlySpeaking {
             speakNext()
@@ -569,23 +586,75 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     /// Routes to either Kokoro or system TTS based on user preference.
     private func speakNext() {
         guard !speechQueue.isEmpty else {
+            print("[TTS SpeakNext] Queue empty, stopping")
             currentlySpeaking = false
             updateState()
             // Keep audio session active for a moment in case more text is coming
             return
         }
-        
+
         let sentence = speechQueue.removeFirst()
+        print("[TTS SpeakNext] Speaking: '\(sentence.prefix(60))...' (remaining in queue: \(speechQueue.count))")
         currentlySpeaking = true
         updateState()
         
         // Determine which TTS engine to use
         let preferredEngine = voiceSettings.settings.ttsEngine
-        
-        if preferredEngine == .kokoro {
+
+        switch preferredEngine {
+        case .kokoro:
             speakWithKokoro(sentence)
-        } else {
+        case .elevenLabs:
+            speakWithElevenLabs(sentence)
+        case .system:
             speakWithSystem(sentence)
+        }
+    }
+
+    /// Speak a sentence using ElevenLabs cloud TTS.
+    /// Falls back to system TTS if ElevenLabs is not configured.
+    private func speakWithElevenLabs(_ sentence: String) {
+        kokoroSpeechTask = Task { [weak self] in
+            guard let self = self else { return }
+
+            let elevenLabs = ElevenLabsTTSManager.shared
+
+            // Check if ElevenLabs is configured
+            let isConfigured = await elevenLabs.isConfigured
+
+            guard isConfigured else {
+                print("[IncrementalTTSManager] ElevenLabs not configured, falling back to system TTS")
+                await MainActor.run {
+                    self.speakWithSystem(sentence)
+                }
+                return
+            }
+
+            do {
+                // Configure audio session
+                await MainActor.run {
+                    self.configureAudioSession()
+                }
+
+                BackgroundAudioManager.shared.audioStarted()
+
+                let voiceId = await MainActor.run {
+                    voiceSettings.settings.elevenLabsVoiceId ?? "EXAVITQu4vr4xnSDxMaL"
+                }
+                let speed = await MainActor.run { voiceSettings.settings.speechRate }
+
+                print("[IncrementalTTSManager] Speaking with ElevenLabs: \(sentence.prefix(30))...")
+                try await elevenLabs.speak(text: sentence, voiceId: voiceId, speed: speed)
+
+                await MainActor.run {
+                    self.handleSpeechComplete()
+                }
+            } catch {
+                print("[IncrementalTTSManager] ElevenLabs error: \(error), falling back to system TTS")
+                await MainActor.run {
+                    self.speakWithSystem(sentence)
+                }
+            }
         }
     }
     
@@ -774,11 +843,14 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     
     /// Handle completion of a spoken sentence (from either engine).
     private func handleSpeechComplete() {
+        print("[TTS Complete] Speech finished, queue size: \(speechQueue.count)")
+
         // Speak the next sentence in queue
         speakNext()
-        
+
         // If queue is empty and no more text coming, we're done
         if speechQueue.isEmpty && !currentlySpeaking {
+            print("[TTS Complete] All done, deactivating audio session after delay")
             BackgroundAudioManager.shared.audioEnded()
             // Delay deactivation slightly to handle back-to-back sentences
             Task {

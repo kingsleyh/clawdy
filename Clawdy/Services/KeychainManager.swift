@@ -15,6 +15,7 @@ class KeychainManager {
         case gatewayPort = "com.clawdy.gateway.port"
         case gatewayAuthToken = "com.clawdy.gateway.authToken"
         case gatewayTLS = "com.clawdy.gateway.tls"
+        case gatewaySessionKey = "com.clawdy.gateway.sessionKey"
     }
 
     // MARK: - Gateway Credentials
@@ -25,16 +26,20 @@ class KeychainManager {
         var port: Int
         var authToken: String?
         var useTLS: Bool
+        var sessionKey: String
 
         static var empty: GatewayCredentials {
-            GatewayCredentials(host: "", port: 18790, authToken: nil, useTLS: false)
+            GatewayCredentials(host: "", port: 18790, authToken: nil, useTLS: false, sessionKey: defaultSessionKey)
         }
 
         /// Default gateway port for Clawdbot node bridge (TCP)
         static let defaultPort: Int = 18790
-        
+
         /// Default gateway port for WebSocket chat
         static let defaultChatPort: Int = 18789
+
+        /// Default session key
+        static let defaultSessionKey: String = "agent:main:main"
     }
 
     /// Save gateway credentials to Keychain
@@ -47,6 +52,7 @@ class KeychainManager {
             deleteItem(forKey: .gatewayAuthToken)
         }
         try saveString(credentials.useTLS ? "true" : "false", forKey: .gatewayTLS)
+        try saveString(credentials.sessionKey, forKey: .gatewaySessionKey)
     }
 
     /// Load gateway credentials from Keychain
@@ -60,12 +66,14 @@ class KeychainManager {
         let authToken = getString(forKey: .gatewayAuthToken)
         let tlsString = getString(forKey: .gatewayTLS)
         let useTLS = tlsString == "true"
+        let sessionKey = getString(forKey: .gatewaySessionKey) ?? GatewayCredentials.defaultSessionKey
 
         return GatewayCredentials(
             host: host,
             port: port,
             authToken: authToken,
-            useTLS: useTLS
+            useTLS: useTLS,
+            sessionKey: sessionKey
         )
     }
 
@@ -81,6 +89,7 @@ class KeychainManager {
         deleteItem(forKey: .gatewayPort)
         deleteItem(forKey: .gatewayAuthToken)
         deleteItem(forKey: .gatewayTLS)
+        deleteItem(forKey: .gatewaySessionKey)
     }
 
     // MARK: - Gateway Individual Field Access (for Settings UI)
@@ -125,6 +134,28 @@ class KeychainManager {
         set {
             try? saveString(newValue ? "true" : "false", forKey: .gatewayTLS)
         }
+    }
+
+    var gatewaySessionKey: String {
+        get { getString(forKey: .gatewaySessionKey) ?? GatewayCredentials.defaultSessionKey }
+        set {
+            try? saveString(newValue, forKey: .gatewaySessionKey)
+        }
+    }
+
+    /// Normalize a session key input to the canonical format
+    /// - "main" or "global" → used as-is
+    /// - "agent:..." → used as-is
+    /// - anything else (e.g., "iphone") → "agent:main:iphone"
+    static func normalizeSessionKey(_ input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == "main" || trimmed == "global" {
+            return trimmed.isEmpty ? GatewayCredentials.defaultSessionKey : trimmed
+        }
+        if trimmed.hasPrefix("agent:") {
+            return trimmed
+        }
+        return "agent:main:\(trimmed)"
     }
 
     // MARK: - Private Keychain Operations

@@ -32,10 +32,15 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
 
                     Toggle("Use TLS", isOn: $viewModel.gatewayTLS)
+
+                    TextField("Session Key", text: $viewModel.sessionKey)
+                        .textContentType(.none)
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
                 } header: {
                     Text("Gateway")
                 } footer: {
-                    Text("Clawdbot gateway host. Uses gateway.auth.token when no device token exists.")
+                    Text("Session key separates conversations. Use a unique key (e.g., 'iphone') to keep this device's chat separate from other clients.")
                 }
                 
                 // TTS Engine Selection
@@ -83,7 +88,8 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
 
                     // Voice selection - show different picker based on engine
-                    if voiceSettings.settings.ttsEngine == .system {
+                    switch voiceSettings.settings.ttsEngine {
+                    case .system:
                         NavigationLink {
                             VoiceSelectionView(voiceSettings: voiceSettings)
                         } label: {
@@ -94,7 +100,7 @@ struct SettingsView: View {
                                     .foregroundColor(.secondary)
                             }
                         }
-                    } else {
+                    case .kokoro:
                         NavigationLink {
                             KokoroVoiceSelectionView(voiceSettings: voiceSettings, kokoroTTS: kokoroTTS)
                         } label: {
@@ -106,6 +112,17 @@ struct SettingsView: View {
                             }
                         }
                         .disabled(kokoroTTS.state != .ready)
+                    case .elevenLabs:
+                        NavigationLink {
+                            ElevenLabsSettingsView(voiceSettings: voiceSettings)
+                        } label: {
+                            HStack {
+                                Text("ElevenLabs Settings")
+                                Spacer()
+                                Text(voiceSettings.settings.elevenLabsVoiceDisplayName ?? "Sarah")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
 
                     // Test voice button
@@ -338,10 +355,28 @@ struct SettingsView: View {
 
     /// Play a test phrase with current voice settings
     private func testVoice() {
-        if voiceSettings.settings.ttsEngine == .kokoro {
+        switch voiceSettings.settings.ttsEngine {
+        case .kokoro:
             testKokoroVoice()
-        } else {
+        case .elevenLabs:
+            testElevenLabsVoice()
+        case .system:
             testSystemVoice()
+        }
+    }
+
+    /// Test the ElevenLabs TTS voice
+    private func testElevenLabsVoice() {
+        Task {
+            do {
+                let voiceId = voiceSettings.settings.elevenLabsVoiceId ?? "EXAVITQu4vr4xnSDxMaL"
+                try await ElevenLabsTTSManager.shared.speak(
+                    text: "Hello, I'm ready to help you with your tasks.",
+                    voiceId: voiceId
+                )
+            } catch {
+                print("[TestVoice] ElevenLabs error: \(error)")
+            }
         }
     }
     
@@ -915,9 +950,9 @@ struct KokoroVoiceRow: View {
     
     private func previewVoice() {
         guard !isPreviewing else { return }
-        
+
         isPreviewing = true
-        
+
         Task {
             do {
                 try await kokoroTTS.previewVoice(voice, speed: speechRate)
@@ -925,6 +960,153 @@ struct KokoroVoiceRow: View {
                 print("[KokoroVoiceRow] Preview error: \(error)")
             }
             isPreviewing = false
+        }
+    }
+}
+
+// MARK: - ElevenLabs Settings View
+
+/// Settings view for ElevenLabs TTS configuration
+struct ElevenLabsSettingsView: View {
+    @ObservedObject var voiceSettings: VoiceSettingsManager
+    @State private var apiKey: String = ""
+    @State private var isConfigured: Bool = false
+    @State private var isTesting: Bool = false
+    @State private var testResult: String?
+
+    var body: some View {
+        Form {
+            Section {
+                SecureField("API Key", text: $apiKey)
+                    .textContentType(.password)
+                    .autocapitalization(.none)
+
+                if isConfigured {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("API Key configured")
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Button(apiKey.isEmpty ? "Save API Key" : "Update API Key") {
+                    saveApiKey()
+                }
+                .disabled(apiKey.isEmpty)
+
+                if isConfigured {
+                    Button("Remove API Key", role: .destructive) {
+                        removeApiKey()
+                    }
+                }
+            } header: {
+                Text("API Key")
+            } footer: {
+                Text("Get your API key from elevenlabs.io")
+            }
+
+            Section {
+                ForEach(ElevenLabsTTSManager.popularVoices, id: \.id) { voice in
+                    Button {
+                        selectVoice(id: voice.id, name: voice.name)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(voice.name)
+                                    .foregroundColor(.primary)
+                                Text(voice.description)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if voiceSettings.settings.elevenLabsVoiceId == voice.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Voice")
+            }
+
+            Section {
+                Button {
+                    testVoice()
+                } label: {
+                    HStack {
+                        if isTesting {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "speaker.wave.2")
+                        }
+                        Text("Test Voice")
+                    }
+                }
+                .disabled(!isConfigured || isTesting)
+
+                if let result = testResult {
+                    Text(result)
+                        .font(.caption)
+                        .foregroundColor(result.contains("Error") ? .red : .green)
+                }
+            } header: {
+                Text("Test")
+            }
+        }
+        .navigationTitle("ElevenLabs")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await checkConfiguration()
+        }
+    }
+
+    private func checkConfiguration() async {
+        isConfigured = await ElevenLabsTTSManager.shared.isConfigured
+    }
+
+    private func saveApiKey() {
+        Task {
+            await ElevenLabsTTSManager.shared.saveApiKey(apiKey)
+            isConfigured = true
+            apiKey = "" // Clear for security
+            testResult = "API Key saved"
+        }
+    }
+
+    private func removeApiKey() {
+        Task {
+            await ElevenLabsTTSManager.shared.deleteApiKey()
+            isConfigured = false
+            testResult = nil
+        }
+    }
+
+    private func selectVoice(id: String, name: String) {
+        voiceSettings.settings.elevenLabsVoiceId = id
+        voiceSettings.settings.elevenLabsVoiceDisplayName = name
+    }
+
+    private func testVoice() {
+        guard isConfigured else { return }
+
+        isTesting = true
+        testResult = nil
+
+        Task {
+            do {
+                let voiceId = voiceSettings.settings.elevenLabsVoiceId ?? "EXAVITQu4vr4xnSDxMaL"
+                try await ElevenLabsTTSManager.shared.speak(
+                    text: "Hello! This is a test of the ElevenLabs voice.",
+                    voiceId: voiceId
+                )
+                testResult = "Voice test successful"
+            } catch {
+                testResult = "Error: \(error.localizedDescription)"
+            }
+            isTesting = false
         }
     }
 }
@@ -937,6 +1119,7 @@ class SettingsViewModel: ObservableObject {
     @Published var gatewayHost: String = ""
     @Published var gatewayAuthToken: String = ""
     @Published var gatewayTLS: Bool = false
+    @Published var sessionKey: String = "main"
 
     @Published var showingClearConfirmation = false
     @Published var showingClearContextConfirmation = false
@@ -1123,22 +1306,33 @@ class SettingsViewModel: ObservableObject {
             gatewayHost = gatewayCredentials.host
             gatewayAuthToken = gatewayCredentials.authToken ?? ""
             gatewayTLS = gatewayCredentials.useTLS
+            // Extract display name from session key (e.g., "agent:main:iphone" -> "iphone")
+            let parts = gatewayCredentials.sessionKey.split(separator: ":")
+            if parts.count == 3 {
+                sessionKey = String(parts[2])
+            } else {
+                sessionKey = gatewayCredentials.sessionKey
+            }
         }
     }
 
     /// Save credentials to Keychain
     func save() {
-        // Save Gateway credentials (host and TLS only - auth uses device identity)
+        // Normalize session key before saving
+        let normalizedSessionKey = KeychainManager.normalizeSessionKey(sessionKey)
+
+        // Save Gateway credentials
         let gatewayCredentials = KeychainManager.GatewayCredentials(
             host: gatewayHost,
             port: KeychainManager.GatewayCredentials.defaultPort,
             authToken: gatewayAuthToken.isEmpty ? nil : gatewayAuthToken,
-            useTLS: gatewayTLS
+            useTLS: gatewayTLS,
+            sessionKey: normalizedSessionKey
         )
-        
+
         do {
             try keychain.saveGatewayCredentials(gatewayCredentials)
-            print("[Settings] Gateway credentials saved successfully")
+            print("[Settings] Gateway credentials saved successfully (session: \(normalizedSessionKey))")
         } catch {
             print("[Settings] Failed to save Gateway credentials: \(error)")
         }
@@ -1153,11 +1347,13 @@ class SettingsViewModel: ObservableObject {
         save()
 
         // Build credentials for test
+        let normalizedSessionKey = KeychainManager.normalizeSessionKey(sessionKey)
         let credentials = KeychainManager.GatewayCredentials(
             host: gatewayHost,
             port: KeychainManager.GatewayCredentials.defaultPort,
             authToken: gatewayAuthToken.isEmpty ? nil : gatewayAuthToken,
-            useTLS: gatewayTLS
+            useTLS: gatewayTLS,
+            sessionKey: normalizedSessionKey
         )
         
         do {
@@ -1177,6 +1373,7 @@ class SettingsViewModel: ObservableObject {
         gatewayHost = ""
         gatewayAuthToken = ""
         gatewayTLS = false
+        sessionKey = "main"
         gatewayTestResult = nil
     }
     

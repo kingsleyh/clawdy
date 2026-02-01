@@ -5,18 +5,21 @@ import AVFoundation
 enum TTSEngine: String, Codable, CaseIterable {
     case system = "system"
     case kokoro = "kokoro"
-    
+    case elevenLabs = "elevenlabs"
+
     var displayName: String {
         switch self {
         case .system: return "System (Built-in)"
         case .kokoro: return "Kokoro (Neural)"
+        case .elevenLabs: return "ElevenLabs (Cloud)"
         }
     }
-    
+
     var description: String {
         switch self {
         case .system: return "Uses Apple's built-in voices"
         case .kokoro: return "High-quality neural TTS (~150MB download)"
+        case .elevenLabs: return "Premium cloud voices (requires API key)"
         }
     }
 }
@@ -40,9 +43,19 @@ struct VoiceSettings: Codable, Equatable {
     
     /// Selected Kokoro voice identifier
     var kokoroVoiceId: String?
-    
+
     /// Display name of the selected Kokoro voice
     var kokoroVoiceDisplayName: String?
+
+    /// ElevenLabs API key (stored in Keychain separately for security)
+    /// This is just a flag to indicate if API key is configured
+    var elevenLabsConfigured: Bool
+
+    /// ElevenLabs voice ID
+    var elevenLabsVoiceId: String?
+
+    /// ElevenLabs voice display name
+    var elevenLabsVoiceDisplayName: String?
 
     /// Default settings
     static let `default` = VoiceSettings(
@@ -51,7 +64,10 @@ struct VoiceSettings: Codable, Equatable {
         voiceIdentifier: nil,
         voiceDisplayName: nil,
         kokoroVoiceId: "af_heart",
-        kokoroVoiceDisplayName: "Heart (Warm female)"
+        kokoroVoiceDisplayName: "Heart (Warm female)",
+        elevenLabsConfigured: false,
+        elevenLabsVoiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah - default voice
+        elevenLabsVoiceDisplayName: "Sarah"
     )
 
     /// Minimum speech rate (half speed)
