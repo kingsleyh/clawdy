@@ -91,20 +91,27 @@ struct ClawdyApp: App {
     /// 3. The model hasn't already been warmed up
     private func warmUpKokoroIfNeeded() {
         let voiceSettings = VoiceSettingsManager.shared
-        
+
+        // Restore saved Kokoro voice preference regardless of current engine
+        if let savedVoiceId = voiceSettings.settings.kokoroVoiceId {
+            Task.detached(priority: .utility) {
+                await KokoroTTSManager.shared.setSelectedVoiceId(savedVoiceId)
+            }
+        }
+
         // Only warm up if Kokoro is the preferred engine
         guard voiceSettings.settings.ttsEngine == .kokoro else {
             return
         }
-        
+
         // Warm up in a background task to not block app launch
         Task.detached(priority: .utility) {
             let manager = KokoroTTSManager.shared
-            
+
             // Check if model is downloaded and not already warmed up
             let isDownloaded = await manager.modelDownloaded
             let isWarmedUp = await manager.isWarmedUp
-            
+
             guard isDownloaded && !isWarmedUp else {
                 return
             }

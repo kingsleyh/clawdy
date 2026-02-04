@@ -628,6 +628,13 @@ actor KokoroTTSManager {
     func setSelectedVoice(_ voice: KokoroVoice) {
         selectedVoiceId = voice.id
     }
+
+    /// Set the selected voice by ID (used for restoring saved preference on launch)
+    func setSelectedVoiceId(_ id: String) {
+        if availableVoices.contains(where: { $0.id == id }) {
+            selectedVoiceId = id
+        }
+    }
     
     // MARK: - Public API: Audio Generation
     
