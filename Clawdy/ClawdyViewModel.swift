@@ -267,6 +267,7 @@ class ClawdyViewModel: ObservableObject {
     @Published var isContinuousMode = false {
         didSet {
             UserDefaults.standard.set(isContinuousMode, forKey: "com.clawdy.continuousMode")
+            UIApplication.shared.isIdleTimerDisabled = isContinuousMode
         }
     }
     @Published var connectionStatus: ConnectionStatus = .disconnected(reason: "Not connected") {
