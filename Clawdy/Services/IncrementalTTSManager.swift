@@ -708,7 +708,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                     await MainActor.run { self.startPrefetchingNextSentence(speed: speed) }
                     
                     try await kokoroManager.playAudioBuffer(prefetchedBuffer)
-                } else if sentence.count > 100 {
+                } else if sentence.count > 300 {
                     // Long sentence - use streaming to start playback sooner
                     // Text >100 chars will be chunked, so streaming helps
                     print("[IncrementalTTSManager] Streaming long sentence: \(sentence.prefix(30))...")

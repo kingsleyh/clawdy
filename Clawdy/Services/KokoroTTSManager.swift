@@ -634,9 +634,10 @@ actor KokoroTTSManager {
     // MARK: - Text Chunking Configuration
     
     /// Maximum characters per chunk for memory-safe generation.
-    /// Shorter chunks reduce peak memory usage during inference.
-    /// ~100 chars produces ~4-6 seconds of audio, keeping memory under ~500MB per chunk.
-    private static let maxChunkLength = 100
+    /// IncrementalTTSManager already splits text into sentences (~30 words / ~200 chars),
+    /// so 300 lets most sentences pass through as a single chunk, avoiding context loss
+    /// from independent generation of small fragments. ~300 chars ≈ ~1.5GB peak memory.
+    private static let maxChunkLength = 300
     
     /// Generate audio from text
     /// - Parameters:
@@ -1110,12 +1111,8 @@ actor KokoroTTSManager {
             player.play()
         }
         
-        // Deactivate audio session
-        #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        #endif
     }
-    
+
     // MARK: - Checksum Verification
     
     /// Compute SHA256 checksum of a file using streaming to handle large files efficiently.
