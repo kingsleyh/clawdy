@@ -6,12 +6,14 @@ enum TTSEngine: String, Codable, CaseIterable {
     case system = "system"
     case kokoro = "kokoro"
     case elevenLabs = "elevenlabs"
+    case edgeTTS = "edgetts"
 
     var displayName: String {
         switch self {
-        case .system: return "System (Built-in)"
-        case .kokoro: return "Kokoro (Neural)"
-        case .elevenLabs: return "ElevenLabs (Cloud)"
+        case .system: return "System"
+        case .kokoro: return "Kokoro"
+        case .elevenLabs: return "11Labs"
+        case .edgeTTS: return "Edge"
         }
     }
 
@@ -20,6 +22,7 @@ enum TTSEngine: String, Codable, CaseIterable {
         case .system: return "Uses Apple's built-in voices"
         case .kokoro: return "High-quality neural TTS (~150MB download)"
         case .elevenLabs: return "Premium cloud voices (requires API key)"
+        case .edgeTTS: return "Free high-quality Microsoft neural voices"
         }
     }
 }
@@ -57,6 +60,12 @@ struct VoiceSettings: Codable, Equatable {
     /// ElevenLabs voice display name
     var elevenLabsVoiceDisplayName: String?
 
+    /// Edge TTS voice ID
+    var edgeTTSVoiceId: String?
+
+    /// Edge TTS voice display name
+    var edgeTTSVoiceDisplayName: String?
+
     /// Default settings
     static let `default` = VoiceSettings(
         ttsEngine: .system,
@@ -67,7 +76,9 @@ struct VoiceSettings: Codable, Equatable {
         kokoroVoiceDisplayName: "Heart (Warm female)",
         elevenLabsConfigured: false,
         elevenLabsVoiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah - default voice
-        elevenLabsVoiceDisplayName: "Sarah"
+        elevenLabsVoiceDisplayName: "Sarah",
+        edgeTTSVoiceId: "en-US-JennyNeural",
+        edgeTTSVoiceDisplayName: "Jenny"
     )
 
     /// Minimum speech rate (half speed)

@@ -606,6 +606,8 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             speakWithKokoro(sentence)
         case .elevenLabs:
             speakWithElevenLabs(sentence)
+        case .edgeTTS:
+            speakWithEdgeTTS(sentence)
         case .system:
             speakWithSystem(sentence)
         }
@@ -658,6 +660,39 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         }
     }
     
+    /// Speak a sentence using Edge TTS (free Microsoft neural voices).
+    /// Falls back to system TTS on error.
+    private func speakWithEdgeTTS(_ sentence: String) {
+        kokoroSpeechTask = Task { [weak self] in
+            guard let self = self else { return }
+
+            do {
+                await MainActor.run {
+                    self.configureAudioSession()
+                }
+
+                BackgroundAudioManager.shared.audioStarted()
+
+                let voiceId = await MainActor.run {
+                    voiceSettings.settings.edgeTTSVoiceId ?? "en-US-JennyNeural"
+                }
+                let speed = await MainActor.run { voiceSettings.settings.speechRate }
+
+                print("[IncrementalTTSManager] Speaking with Edge TTS: \(sentence.prefix(30))...")
+                try await EdgeTTSManager.shared.speak(text: sentence, voiceId: voiceId, speed: speed)
+
+                await MainActor.run {
+                    self.handleSpeechComplete()
+                }
+            } catch {
+                print("[IncrementalTTSManager] Edge TTS error: \(error), falling back to system TTS")
+                await MainActor.run {
+                    self.speakWithSystem(sentence)
+                }
+            }
+        }
+    }
+
     /// Speak a sentence using Kokoro neural TTS.
     /// Falls back to system TTS if Kokoro is not ready.
     /// Uses pipeline parallelism: plays prefetched audio if available, prefetches next sentence during playback.

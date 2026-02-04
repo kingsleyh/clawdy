@@ -72,8 +72,8 @@ class UnifiedTTSManager: ObservableObject {
     var isPreferredEngineReady: Bool {
         get async {
             switch preferredEngine {
-            case .system:
-                return true // System TTS is always available
+            case .system, .elevenLabs, .edgeTTS:
+                return true
             case .kokoro:
                 return await kokoroManager.modelDownloaded
             }
@@ -93,11 +93,13 @@ class UnifiedTTSManager: ObservableObject {
             do {
                 try await speakWithKokoro(text)
             } catch {
-                // Fall back to system TTS
                 print("[UnifiedTTSManager] Kokoro failed, falling back to system TTS: \(error.localizedDescription)")
                 lastError = "Kokoro unavailable, using system TTS"
                 try await speakWithSystem(text)
             }
+        case .elevenLabs, .edgeTTS:
+            // These are handled by IncrementalTTSManager directly
+            try await speakWithSystem(text)
         case .system:
             try await speakWithSystem(text)
         }

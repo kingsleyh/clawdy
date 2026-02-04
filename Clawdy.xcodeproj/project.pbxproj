@@ -67,6 +67,7 @@
 		A100004B /* GatewayConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004B /* GatewayConnection.swift */; };
 		A100004C /* GatewayDualConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004C /* GatewayDualConnectionManager.swift */; };
 		A100004D /* ElevenLabsTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004D /* ElevenLabsTTSManager.swift */; };
+		A100004E /* EdgeTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004E /* EdgeTTSManager.swift */; };
 		A10000E1 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -145,6 +146,7 @@
 		A200004B /* GatewayConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayConnection.swift; sourceTree = "<group>"; };
 		A200004C /* GatewayDualConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayDualConnectionManager.swift; sourceTree = "<group>"; };
 		A200004D /* ElevenLabsTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsTTSManager.swift; sourceTree = "<group>"; };
+		A200004E /* EdgeTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeTTSManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -203,6 +205,7 @@
 				A2000010 /* BackgroundAudioManager.swift */,
 				A2000042 /* CameraCapabilityService.swift */,
 				A2000044 /* LocationCapabilityService.swift */,
+				A200004E /* EdgeTTSManager.swift */,
 				A200004D /* ElevenLabsTTSManager.swift */,
 				A200003C /* GatewayProtocolTypes.swift */,
 				A200003E /* GatewayChatClient.swift */,
@@ -432,6 +435,7 @@
 				A100004B /* GatewayConnection.swift in Sources */,
 				A100004C /* GatewayDualConnectionManager.swift in Sources */,
 				A100004D /* ElevenLabsTTSManager.swift in Sources */,
+				A100004E /* EdgeTTSManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

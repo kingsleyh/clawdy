@@ -123,6 +123,17 @@ struct SettingsView: View {
                                     .foregroundColor(.secondary)
                             }
                         }
+                    case .edgeTTS:
+                        NavigationLink {
+                            EdgeTTSSettingsView(voiceSettings: voiceSettings)
+                        } label: {
+                            HStack {
+                                Text("Voice")
+                                Spacer()
+                                Text(voiceSettings.settings.edgeTTSVoiceDisplayName ?? "Jenny")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
 
                     // Test voice button
@@ -360,8 +371,26 @@ struct SettingsView: View {
             testKokoroVoice()
         case .elevenLabs:
             testElevenLabsVoice()
+        case .edgeTTS:
+            testEdgeTTSVoice()
         case .system:
             testSystemVoice()
+        }
+    }
+
+    /// Test the Edge TTS voice
+    private func testEdgeTTSVoice() {
+        Task {
+            do {
+                let voiceId = voiceSettings.settings.edgeTTSVoiceId ?? "en-US-JennyNeural"
+                try await EdgeTTSManager.shared.speak(
+                    text: "Hello, I'm ready to help you with your tasks.",
+                    voiceId: voiceId,
+                    speed: voiceSettings.settings.speechRate
+                )
+            } catch {
+                print("[TestVoice] Edge TTS error: \(error)")
+            }
         }
     }
 
@@ -967,6 +996,104 @@ struct KokoroVoiceRow: View {
 // MARK: - ElevenLabs Settings View
 
 /// Settings view for ElevenLabs TTS configuration
+// MARK: - Edge TTS Settings View
+
+struct EdgeTTSSettingsView: View {
+    @ObservedObject var voiceSettings: VoiceSettingsManager
+    @State private var isTesting: Bool = false
+    @State private var testResult: String?
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(EdgeTTSManager.popularVoices, id: \.id) { voice in
+                    Button {
+                        selectVoice(id: voice.id, name: voice.name)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(voice.name)
+                                        .foregroundColor(.primary)
+                                    Text("(\(voice.gender))")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Text(voice.description)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if voiceSettings.settings.edgeTTSVoiceId == voice.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Voice")
+            } footer: {
+                Text("Free neural voices powered by Microsoft Edge. No API key required.")
+            }
+
+            Section {
+                Button {
+                    testVoice()
+                } label: {
+                    HStack {
+                        if isTesting {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "speaker.wave.2")
+                        }
+                        Text("Test Voice")
+                    }
+                }
+                .disabled(isTesting)
+
+                if let result = testResult {
+                    Text(result)
+                        .font(.caption)
+                        .foregroundColor(result.contains("Error") ? .red : .green)
+                }
+            } header: {
+                Text("Test")
+            }
+        }
+        .navigationTitle("Edge TTS")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func selectVoice(id: String, name: String) {
+        voiceSettings.settings.edgeTTSVoiceId = id
+        voiceSettings.settings.edgeTTSVoiceDisplayName = name
+    }
+
+    private func testVoice() {
+        isTesting = true
+        testResult = nil
+
+        Task {
+            do {
+                let voiceId = voiceSettings.settings.edgeTTSVoiceId ?? "en-US-JennyNeural"
+                try await EdgeTTSManager.shared.speak(
+                    text: "Hello! This is a test of the Edge TTS voice.",
+                    voiceId: voiceId,
+                    speed: voiceSettings.settings.speechRate
+                )
+                testResult = "Voice test successful"
+            } catch {
+                testResult = "Error: \(error.localizedDescription)"
+            }
+            isTesting = false
+        }
+    }
+}
+
+// MARK: - ElevenLabs Settings View
+
 struct ElevenLabsSettingsView: View {
     @ObservedObject var voiceSettings: VoiceSettingsManager
     @State private var apiKey: String = ""
