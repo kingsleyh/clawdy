@@ -378,11 +378,11 @@ class GatewayDualConnectionManager: ObservableObject {
         let sharedToken = credentials.authToken
         let deviceName = await MainActor.run { UIDevice.current.name }
         
-        // Create operator connection (uses node role for OpenClaw gateway compatibility)
+        // Create operator connection for chat operations
         let operatorOptions = GatewayConnectOptions.forOperator(displayName: deviceName)
         operatorConnection = GatewayConnection(
             url: url,
-            role: .node,
+            role: .operator,
             connectOptions: operatorOptions,
             sharedToken: sharedToken,
             autoReconnect: false
