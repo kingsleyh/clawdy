@@ -1518,10 +1518,22 @@ class ClawdyViewModel: ObservableObject {
 
                 if text.count >= gatewayFullText.count && normalizedIncoming.contains(normalizedCurrent) {
                     if text.hasPrefix(gatewayFullText) {
+                        // Exact prefix match — extract only the new suffix
                         let suffix = text.dropFirst(gatewayFullText.count)
                         if !suffix.isEmpty, inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
                             incrementalTTS.appendText(String(suffix))
                             ttsSentUpToIndex = text.count
+                        }
+                    } else {
+                        // Normalized match but not exact prefix (whitespace differences).
+                        // This is full accumulated text — use ttsSentUpToIndex for delta.
+                        print("[TTS] Normalized match, using ttsSentUpToIndex (\(ttsSentUpToIndex)) to extract delta from text (\(text.count) chars)")
+                        if text.count > ttsSentUpToIndex, inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
+                            let newContent = String(text.dropFirst(ttsSentUpToIndex))
+                            if !newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                incrementalTTS.appendText(newContent)
+                                ttsSentUpToIndex = text.count
+                            }
                         }
                     }
                     gatewayFullText = text
@@ -1538,15 +1550,33 @@ class ClawdyViewModel: ObservableObject {
                     }
                 } else {
                     // Fallback: text doesn't prefix-match gatewayFullText.
-                    // This commonly happens after tool calls when the gateway re-sends
-                    // accumulated text with minor whitespace differences.
-                    // Use ttsSentUpToIndex to only speak genuinely new content,
-                    // preventing the TTS repeat/loop bug.
-                    gatewayFullText += text
-                    if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                        let newContent = String(gatewayFullText.dropFirst(ttsSentUpToIndex))
-                        if !newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            incrementalTTS.appendText(newContent)
+                    // Two scenarios:
+                    // (a) Gateway re-sent full accumulated text (state:"delta" format)
+                    //     after a tool call — text is >= gatewayFullText length.
+                    //     Must REPLACE gatewayFullText, not append.
+                    // (b) True small delta that doesn't match — append it.
+                    let isLikelyFullAccumulated = text.count >= gatewayFullText.count
+
+                    if isLikelyFullAccumulated {
+                        // REPLACE — gateway sent full accumulated text
+                        print("[TTS] Fallback REPLACE: incoming (\(text.count) chars) >= current (\(gatewayFullText.count) chars), ttsSentUpToIndex=\(ttsSentUpToIndex)")
+                        let previousIndex = ttsSentUpToIndex
+                        gatewayFullText = text  // REPLACE, not append
+                        if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
+                            if text.count > previousIndex {
+                                let newContent = String(text.dropFirst(previousIndex))
+                                if !newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    incrementalTTS.appendText(newContent)
+                                    ttsSentUpToIndex = text.count
+                                }
+                            }
+                        }
+                    } else {
+                        // True small delta — append
+                        print("[TTS] Fallback APPEND: incoming (\(text.count) chars) < current (\(gatewayFullText.count) chars)")
+                        gatewayFullText += text
+                        if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
+                            incrementalTTS.appendText(text)
                             ttsSentUpToIndex = gatewayFullText.count
                         }
                     }
