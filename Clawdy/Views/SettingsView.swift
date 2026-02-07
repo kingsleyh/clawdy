@@ -152,6 +152,15 @@ struct SettingsView: View {
                     Text("Adjust how Claude speaks responses back to you")
                 }
 
+                // Thinking Level
+                Section {
+                    ThinkingLevelPicker()
+                } header: {
+                    Text("Thinking Level")
+                } footer: {
+                    Text("Controls how much reasoning the AI does before responding. Higher levels produce better quality but take longer.")
+                }
+
                 // Session context
                 if onClearContext != nil {
                     Section {

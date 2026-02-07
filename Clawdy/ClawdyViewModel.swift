@@ -1737,7 +1737,7 @@ class ClawdyViewModel: ObservableObject {
             _ = try await gatewayChatClient.sendMessage(
                 text: command,
                 images: images,
-                thinking: "low"
+                thinking: ThinkingLevelManager.shared.level.rawValue
             )
             
             // Wait for streaming completion signaled by gateway events
