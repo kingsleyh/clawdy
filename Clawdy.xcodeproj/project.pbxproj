@@ -71,6 +71,8 @@
 		A100004C /* GatewayDualConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004C /* GatewayDualConnectionManager.swift */; };
 		A100004D /* ElevenLabsTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004D /* ElevenLabsTTSManager.swift */; };
 		A100004E /* EdgeTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004E /* EdgeTTSManager.swift */; };
+		EE000001 /* ThinkingLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE000002 /* ThinkingLevel.swift */; };
+		EE000003 /* ThinkingLevelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE000004 /* ThinkingLevelPicker.swift */; };
 		A10000E1 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -151,6 +153,8 @@
 		A200004D /* ElevenLabsTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsTTSManager.swift; sourceTree = "<group>"; };
 		A200004E /* EdgeTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeTTSManager.swift; sourceTree = "<group>"; };
 		BB000004 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
+		EE000002 /* ThinkingLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingLevel.swift; sourceTree = "<group>"; };
+		EE000004 /* ThinkingLevelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingLevelPicker.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -272,6 +276,7 @@
 				A2000038 /* QuickLookView.swift */,
 				A200000D /* SettingsView.swift */,
 				A2000019 /* TextInputBar.swift */,
+				EE000004 /* ThinkingLevelPicker.swift */,
 				A200001C /* ToastView.swift */,
 			);
 			path = Views;
@@ -281,6 +286,7 @@
 			isa = PBXGroup;
 			children = (
 				A200001E /* ImageAttachment.swift */,
+				EE000002 /* ThinkingLevel.swift */,
 				A2000012 /* VoiceSettings.swift */,
 			);
 			path = Models;
@@ -448,6 +454,8 @@
 				A100004D /* ElevenLabsTTSManager.swift in Sources */,
 				A100004E /* EdgeTTSManager.swift in Sources */,
 				BB000003 /* MarkdownMessageView.swift in Sources */,
+				EE000001 /* ThinkingLevel.swift in Sources */,
+				EE000003 /* ThinkingLevelPicker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
