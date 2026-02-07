@@ -252,9 +252,14 @@ actor ElevenLabsTTSManager {
         // Configure audio session for simultaneous recording and playback.
         // Using .playAndRecord allows voice chat to continue in the background.
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
-            options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
-        try audioSession.setActive(true)
+        if BackgroundAudioManager.isContinuousVoiceModeActive() {
+            try audioSession.setActive(true)
+        } else {
+            try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
+            try audioSession.setActive(true)
+        }
+
 
         // Set up audio engine
         try setupAudioEngine()
@@ -386,9 +391,14 @@ actor ElevenLabsTTSManager {
     /// IncrementalTTSManager's prefetch pipeline.
     func playAudioBuffer(_ buffer: AVAudioPCMBuffer) async throws {
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
-            options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
-        try audioSession.setActive(true)
+        if BackgroundAudioManager.isContinuousVoiceModeActive() {
+            try audioSession.setActive(true)
+        } else {
+            try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
+            try audioSession.setActive(true)
+        }
+
 
         try setupAudioEngine()
 
@@ -424,7 +434,7 @@ actor ElevenLabsTTSManager {
     func stop() {
         playerNode?.stop()
         teardownAudioEngine()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        BackgroundAudioManager.deactivateAudioSessionIfAllowed()
     }
 }
 

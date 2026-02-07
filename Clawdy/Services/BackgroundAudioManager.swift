@@ -1,6 +1,11 @@
 import Foundation
 import AVFoundation
 
+// Thread-safe storage for continuous voice flag, accessible from any actor/thread.
+// Stored at file scope to avoid @MainActor isolation of the class.
+private let _voiceModeLock = NSLock()
+private var _continuousVoiceActive = false
+
 /// Manages background audio state to allow TTS and voice chat to continue when app enters background.
 /// Tracks whether audio is actively playing or continuous voice mode is active
 /// to prevent premature app locking and audio session teardown.
@@ -40,6 +45,10 @@ class BackgroundAudioManager: ObservableObject {
     /// Call when continuous voice mode is toggled
     func setContinuousVoiceMode(_ active: Bool) {
         isContinuousVoiceActive = active
+        // Mirror to thread-safe flag for cross-actor access
+        _voiceModeLock.lock()
+        _continuousVoiceActive = active
+        _voiceModeLock.unlock()
         if active {
             // Activate a persistent audio session that supports both input and output.
             // This keeps the app alive in the background via the "audio" background mode.
@@ -60,6 +69,19 @@ class BackgroundAudioManager: ObservableObject {
         return isAudioPlaying || isContinuousVoiceActive
     }
 
+    /// Thread-safe check for continuous voice mode. Safe to call from any actor/thread.
+    nonisolated static func isContinuousVoiceModeActive() -> Bool {
+        _voiceModeLock.lock()
+        defer { _voiceModeLock.unlock() }
+        return _continuousVoiceActive
+    }
+
+    /// Deactivate audio session only if continuous voice mode is NOT active.
+    nonisolated static func deactivateAudioSessionIfAllowed() {
+        guard !isContinuousVoiceModeActive() else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
     // MARK: - Private Helpers
 
     /// Activate an audio session configured for background voice chat.
@@ -75,6 +97,7 @@ class BackgroundAudioManager: ObservableObject {
                 options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
             )
             try session.setActive(true)
+
             print("[BackgroundAudioManager] Activated background voice session (playAndRecord)")
         } catch {
             print("[BackgroundAudioManager] Failed to activate background audio session: \(error)")

@@ -160,9 +160,14 @@ actor EdgeTTSManager {
         return try await withCheckedThrowingContinuation { continuation in
             do {
                 let audioSession = AVAudioSession.sharedInstance()
-                try audioSession.setCategory(.playback, mode: .voicePrompt,
-                    options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
-                try audioSession.setActive(true)
+                if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                    try audioSession.setActive(true)
+                } else {
+                    try audioSession.setCategory(.playback, mode: .voicePrompt,
+                        options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+                    try audioSession.setActive(true)
+                }
+
 
                 let player = try AVAudioPlayer(data: audioData)
                 self.audioPlayer = player
@@ -184,7 +189,7 @@ actor EdgeTTSManager {
     func stop() {
         audioPlayer?.stop()
         audioPlayer = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        BackgroundAudioManager.deactivateAudioSessionIfAllowed()
     }
 }
 

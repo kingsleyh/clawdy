@@ -730,6 +730,10 @@ class ClawdyViewModel: ObservableObject {
         // other apps like Google Maps)
         BackgroundAudioManager.shared.setContinuousVoiceMode(isContinuousMode)
 
+        // Keep the audio engine alive in continuous mode so recording can
+        // restart in the background without starting new I/O (which iOS blocks).
+        speechRecognizer.keepEngineRunning = isContinuousMode
+
         if isContinuousMode {
             // Start recording if not already recording or speaking
             if !isRecording && !isSpeaking {
@@ -741,6 +745,8 @@ class ClawdyViewModel: ObservableObject {
                 isRecording = false
                 _ = speechRecognizer.stopRecording()
             }
+            // Clean up the engine that was kept alive for continuous mode
+            speechRecognizer.stopEngine()
 
             // Stop any ongoing TTS
             incrementalTTS.stop()

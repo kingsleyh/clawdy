@@ -1036,27 +1036,27 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     private func configureAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(
-                .playAndRecord,
-                mode: .voicePrompt,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
-            )
-            try audioSession.setActive(true)
+            if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                // Session already configured by BackgroundAudioManager — don't reconfigure.
+                // Changing mode from .voiceChat to .voicePrompt while backgrounded causes -50.
+                try audioSession.setActive(true)
+            } else {
+                try audioSession.setCategory(
+                    .playAndRecord,
+                    mode: .voicePrompt,
+                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
+                )
+                try audioSession.setActive(true)
+            }
+
         } catch {
             print("[IncrementalTTSManager] Audio session error: \(error)")
         }
     }
     
-    /// Deactivate audio session when speech is complete
+    /// Deactivate audio session when speech is complete (skipped during continuous voice mode)
     private func deactivateAudioSession() {
-        do {
-            try AVAudioSession.sharedInstance().setActive(
-                false,
-                options: .notifyOthersOnDeactivation
-            )
-        } catch {
-            print("[IncrementalTTSManager] Audio session deactivation error: \(error)")
-        }
+        BackgroundAudioManager.deactivateAudioSessionIfAllowed()
     }
 }
 

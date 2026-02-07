@@ -816,9 +816,14 @@ actor KokoroTTSManager {
         #if os(iOS)
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
-            try audioSession.setActive(true)
+            if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                try audioSession.setActive(true)
+            } else {
+                try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
+                try audioSession.setActive(true)
+            }
+
         } catch {
             print("[KokoroTTSManager] Audio session error: \(error)")
         }
@@ -857,9 +862,9 @@ actor KokoroTTSManager {
             }
         }
         
-        // Deactivate audio session
+        // Deactivate audio session (skipped during continuous voice mode)
         #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        BackgroundAudioManager.deactivateAudioSessionIfAllowed()
         #endif
     }
     
@@ -985,8 +990,8 @@ actor KokoroTTSManager {
         audioEngine = nil
         playerNode = nil
 
-        // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Deactivate audio session (skipped during continuous voice mode)
+        BackgroundAudioManager.deactivateAudioSessionIfAllowed()
 
         // Clear GPU cache to free any lingering MLX memory
         MLX.Memory.clearCache()
@@ -1087,9 +1092,14 @@ actor KokoroTTSManager {
         #if os(iOS)
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
-            try audioSession.setActive(true)
+            if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                try audioSession.setActive(true)
+            } else {
+                try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
+                try audioSession.setActive(true)
+            }
+
         } catch {
             print("[KokoroTTSManager] Audio session error: \(error)")
         }

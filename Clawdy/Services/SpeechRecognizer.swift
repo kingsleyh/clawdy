@@ -46,6 +46,12 @@ class SpeechRecognizer: ObservableObject {
     private let maxRecognitionDuration: TimeInterval = 55 // restart before 60s limit
     var onTimeoutRestart: (() -> Void)? // callback to restart recognition
 
+    /// When true, the audio engine is kept running even when recognition stops.
+    /// iOS does not allow starting new audio I/O from the background, so in
+    /// continuous voice mode we keep the engine's mic tap alive and only
+    /// stop/restart the speech recognition task.
+    var keepEngineRunning = false
+
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         checkAuthorization()
@@ -74,22 +80,28 @@ class SpeechRecognizer: ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
 
-        // Configure audio session for simultaneous recording and playback.
-        // Using .playAndRecord instead of .record allows TTS to play back through
-        // the speaker while the mic is active, which is essential for continuous
-        // voice mode and background voice chat.
-        // .defaultToSpeaker routes audio to the main speaker instead of the earpiece.
-        // .allowBluetooth enables AirPods and car Bluetooth for hands-free use.
-        let audioSession = AVAudioSession.sharedInstance()
-        do {
-            try audioSession.setCategory(
-                .playAndRecord,
-                mode: .measurement,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
-            )
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            throw SpeechRecognizerError.audioSessionError(error)
+        let engineAlreadyRunning = audioEngine.isRunning
+
+        // Configure audio session (skip if engine is already running in continuous mode)
+        if !engineAlreadyRunning {
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                    // In continuous voice mode, the audio session is already configured
+                    // by BackgroundAudioManager with .voiceChat mode. Don't reconfigure —
+                    // changing to .measurement mode in the background triggers !int error.
+                    try audioSession.setActive(true)
+                } else {
+                    try audioSession.setCategory(
+                        .playAndRecord,
+                        mode: .measurement,
+                        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
+                    )
+                    try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+                }
+            } catch {
+                throw SpeechRecognizerError.audioSessionError(error)
+            }
         }
 
         // Create recognition request
@@ -121,8 +133,10 @@ class SpeechRecognizer: ObservableObject {
             }
 
             if error != nil || result?.isFinal == true {
-                self.audioEngine.stop()
-                self.audioEngine.inputNode.removeTap(onBus: 0)
+                if !self.keepEngineRunning {
+                    self.audioEngine.stop()
+                    self.audioEngine.inputNode.removeTap(onBus: 0)
+                }
                 DispatchQueue.main.async {
                     guard !self.isDeliberatelyStopping else { return }
                     self.onRecognitionStopped?()
@@ -130,17 +144,19 @@ class SpeechRecognizer: ObservableObject {
             }
         }
 
-        // Configure audio input
-        let inputNode = audioEngine.inputNode
-        inputNode.removeTap(onBus: 0) // Remove any existing tap to avoid duplicate tap crash
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        // Configure audio input (skip if engine is already running with a tap)
+        if !engineAlreadyRunning {
+            let inputNode = audioEngine.inputNode
+            inputNode.removeTap(onBus: 0) // Remove any existing tap to avoid duplicate tap crash
+            let recordingFormat = inputNode.outputFormat(forBus: 0)
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            self.recognitionRequest?.append(buffer)
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+                self.recognitionRequest?.append(buffer)
+            }
+
+            audioEngine.prepare()
+            try audioEngine.start()
         }
-
-        audioEngine.prepare()
-        try audioEngine.start()
 
         transcribedText = ""
 
@@ -172,8 +188,10 @@ class SpeechRecognizer: ObservableObject {
 
         // Stop current recognition (deliberate - don't trigger onRecognitionStopped)
         isDeliberatelyStopping = true
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        if !keepEngineRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+        }
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionRequest = nil
@@ -192,9 +210,13 @@ class SpeechRecognizer: ObservableObject {
         isDeliberatelyStopping = true
         stopSilenceTimer()
         stopTimeoutTimer()
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        audioEngine.reset()
+
+        if !keepEngineRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+            audioEngine.reset()
+        }
+
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
 
@@ -202,10 +224,21 @@ class SpeechRecognizer: ObservableObject {
         recognitionTask = nil
         recognitionStartTime = nil
 
-        // Deactivate audio session
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if !keepEngineRunning {
+            BackgroundAudioManager.deactivateAudioSessionIfAllowed()
+        }
 
         return transcribedText
+    }
+
+    /// Fully stop the audio engine. Call when exiting continuous mode
+    /// to clean up the engine that was kept alive.
+    func stopEngine() {
+        if audioEngine.isRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+            audioEngine.reset()
+        }
     }
 
     // MARK: - Silence Detection

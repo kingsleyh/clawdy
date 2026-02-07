@@ -161,15 +161,17 @@ class SpeechSynthesizer: NSObject, ObservableObject {
     private func configureAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            // Use .playback category to enable background audio continuation
-            // .duckOthers lowers other audio while speaking
-            // .interruptSpokenAudioAndMixWithOthers allows mixing with other apps while interrupting spoken content
-            try audioSession.setCategory(
-                .playback,
-                mode: .voicePrompt,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
-            )
-            try audioSession.setActive(true)
+            if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                try audioSession.setActive(true)
+            } else {
+                try audioSession.setCategory(
+                    .playback,
+                    mode: .voicePrompt,
+                    options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+                )
+                try audioSession.setActive(true)
+            }
+
         } catch {
             print("[SpeechSynthesizer] Audio session error: \(error)")
         }
@@ -177,11 +179,7 @@ class SpeechSynthesizer: NSObject, ObservableObject {
 
     /// Deactivate audio session when speech is complete
     private func deactivateAudioSession() {
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("[SpeechSynthesizer] Audio session deactivation error: \(error)")
-        }
+        BackgroundAudioManager.deactivateAudioSessionIfAllowed()
     }
 
     /// Extract a summary from long text - returns first sentence or first 150 characters

@@ -209,26 +209,24 @@ class UnifiedTTSManager: ObservableObject {
     private func configureAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(
-                .playback,
-                mode: .voicePrompt,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
-            )
-            try audioSession.setActive(true)
+            if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                try audioSession.setActive(true)
+            } else {
+                try audioSession.setCategory(
+                    .playback,
+                    mode: .voicePrompt,
+                    options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+                )
+                try audioSession.setActive(true)
+            }
+
         } catch {
             print("[UnifiedTTSManager] Audio session error: \(error)")
         }
     }
     
     private func deactivateAudioSession() {
-        do {
-            try AVAudioSession.sharedInstance().setActive(
-                false,
-                options: .notifyOthersOnDeactivation
-            )
-        } catch {
-            print("[UnifiedTTSManager] Audio session deactivation error: \(error)")
-        }
+        BackgroundAudioManager.deactivateAudioSessionIfAllowed()
     }
     
     // MARK: - Errors

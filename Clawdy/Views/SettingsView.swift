@@ -449,8 +449,13 @@ struct SettingsView: View {
         // Configure audio session
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .voicePrompt)
-            try audioSession.setActive(true)
+            if BackgroundAudioManager.isContinuousVoiceModeActive() {
+                try audioSession.setActive(true)
+            } else {
+                try audioSession.setCategory(.playback, mode: .voicePrompt)
+                try audioSession.setActive(true)
+            }
+
         } catch {
             print("[TestVoice] Audio session error: \(error)")
         }
