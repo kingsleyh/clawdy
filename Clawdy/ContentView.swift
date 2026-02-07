@@ -706,10 +706,9 @@ struct MessageBubble: View {
                     )
                 }
 
-                // Main message text
+                // Main message text (markdown for assistant, plain for user)
                 if !message.text.isEmpty {
-                    Text(message.text)
-                        .foregroundColor(message.isUser ? .white : .primary)
+                    MarkdownMessageView(text: message.text, isUser: message.isUser)
                 }
 
                 // Inline tool calls (only for Claude's messages)

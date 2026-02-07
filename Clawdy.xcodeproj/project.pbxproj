@@ -27,8 +27,10 @@
 		A1000015 /* ProcessingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016 /* ProcessingIndicatorView.swift */; };
 		A1000016 /* OfflineBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000017 /* OfflineBannerView.swift */; };
 		A1000017 /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; };
+		BB000001 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = BB000002 /* MarkdownUI */; };
 		A1000018 /* KokoroTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000018 /* KokoroTTSManager.swift */; };
 		A1000019 /* TextInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000019 /* TextInputBar.swift */; };
+		BB000003 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000004 /* MarkdownMessageView.swift */; };
 		A100001A /* CollapsibleToolCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001A /* CollapsibleToolCallView.swift */; };
 		A100001B /* MessagePersistenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001B /* MessagePersistenceManager.swift */; };
 		A100001C /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001C /* ToastView.swift */; };
@@ -147,6 +149,7 @@
 		A200004C /* GatewayDualConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayDualConnectionManager.swift; sourceTree = "<group>"; };
 		A200004D /* ElevenLabsTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsTTSManager.swift; sourceTree = "<group>"; };
 		A200004E /* EdgeTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeTTSManager.swift; sourceTree = "<group>"; };
+		BB000004 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,6 +159,7 @@
 			files = (
 				67DC8D2D2F161A900056C59E /* MLXUtilsLibrary in Frameworks */,
 				A1000017 /* KokoroSwift in Frameworks */,
+				BB000001 /* MarkdownUI in Frameworks */,
 				67DC8D2C2F161A900056C59E /* KokoroTTSManager.swift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -257,6 +261,7 @@
 				A2000035 /* ImagePreviewStrip.swift */,
 				A2000034 /* ImageThumbnailView.swift */,
 				A200000C /* LockScreenView.swift */,
+				BB000004 /* MarkdownMessageView.swift */,
 				A2000037 /* MessageImageGrid.swift */,
 				A2000017 /* OfflineBannerView.swift */,
 				A2000036 /* PasteableTextField.swift */,
@@ -322,6 +327,7 @@
 			packageProductDependencies = (
 				A9000002 /* KokoroSwift */,
 				A9000003 /* MLXUtilsLibrary */,
+				BB000002 /* MarkdownUI */,
 			);
 			productName = Clawdy;
 			productReference = A2000000 /* Clawdy.app */;
@@ -353,6 +359,7 @@
 			mainGroup = A4000000;
 			packageReferences = (
 				AA000002 /* XCRemoteSwiftPackageReference "kokoro-ios" */,
+				BB000005 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 			);
 			productRefGroup = A4000002 /* Products */;
 			projectDirPath = "";
@@ -436,6 +443,7 @@
 				A100004C /* GatewayDualConnectionManager.swift in Sources */,
 				A100004D /* ElevenLabsTTSManager.swift in Sources */,
 				A100004E /* EdgeTTSManager.swift in Sources */,
+				BB000003 /* MarkdownMessageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -665,6 +673,14 @@
 				minimumVersion = 1.0.8;
 			};
 		};
+		BB000005 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -676,6 +692,11 @@
 		A9000003 /* MLXUtilsLibrary */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MLXUtilsLibrary;
+		};
+		BB000002 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB000005 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
