@@ -816,7 +816,8 @@ actor KokoroTTSManager {
         #if os(iOS)
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
+            try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
             try audioSession.setActive(true)
         } catch {
             print("[KokoroTTSManager] Audio session error: \(error)")
@@ -1086,7 +1087,8 @@ actor KokoroTTSManager {
         #if os(iOS)
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
+            try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
             try audioSession.setActive(true)
         } catch {
             print("[KokoroTTSManager] Audio session error: \(error)")

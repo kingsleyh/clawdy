@@ -59,12 +59,17 @@ struct ClawdyApp: App {
 
             // Handle Kokoro backgrounding first - stop GPU work to prevent crashes
             // GPU work from background is NOT allowed before iOS 26
-            Task {
-                await KokoroTTSManager.shared.handleBackgrounding()
+            // But skip this if continuous voice mode is active — we need Kokoro ready
+            if !backgroundAudioManager.shouldKeepAliveInBackground {
+                Task {
+                    await KokoroTTSManager.shared.handleBackgrounding()
+                }
             }
             
             // Only lock app when entering background if audio is not playing
-            // This allows TTS to continue in background until complete
+            // AND continuous voice mode is not active.
+            // When continuous voice mode is on, keep the app unlocked and resources
+            // alive so voice chat continues seamlessly while using other apps.
             if backgroundAudioManager.shouldLockOnBackground {
                 authManager.lock()
                 

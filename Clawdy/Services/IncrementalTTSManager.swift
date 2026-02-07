@@ -1027,14 +1027,19 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         return AVSpeechSynthesisVoice(language: "en-US")
     }
     
-    /// Configure audio session for speech playback
+    /// Configure audio session for speech playback.
+    /// Uses .playAndRecord to support simultaneous mic input and TTS output,
+    /// which is required for continuous voice mode and background voice chat.
+    /// .defaultToSpeaker routes audio to the main speaker instead of the earpiece
+    /// (which is the default for .playAndRecord).
+    /// .allowBluetooth enables AirPods and car Bluetooth for hands-free use.
     private func configureAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(
-                .playback,
+                .playAndRecord,
                 mode: .voicePrompt,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
             )
             try audioSession.setActive(true)
         } catch {

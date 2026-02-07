@@ -74,10 +74,19 @@ class SpeechRecognizer: ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
 
-        // Configure audio session
+        // Configure audio session for simultaneous recording and playback.
+        // Using .playAndRecord instead of .record allows TTS to play back through
+        // the speaker while the mic is active, which is essential for continuous
+        // voice mode and background voice chat.
+        // .defaultToSpeaker routes audio to the main speaker instead of the earpiece.
+        // .allowBluetooth enables AirPods and car Bluetooth for hands-free use.
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .measurement,
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
+            )
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             throw SpeechRecognizerError.audioSessionError(error)
