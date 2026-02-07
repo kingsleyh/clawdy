@@ -374,6 +374,11 @@ class ClawdyViewModel: ObservableObject {
     private var isGatewayToolExecuting = false
     private var gatewayResponseContinuation: CheckedContinuation<Void, Never>?
     
+    /// Tracks the character count of gatewayFullText that has already been sent to TTS.
+    /// This prevents re-speaking text after tool calls when prefix matching diverges.
+    /// Reset alongside gatewayFullText at the start/end of each response.
+    private var ttsSentUpToIndex: Int = 0
+    
     /// Suppress gateway finalization after a user-initiated cancel/interrupt
     private var suppressGatewayFinalization = false
     
@@ -1145,6 +1150,7 @@ class ClawdyViewModel: ObservableObject {
         // 6.4: Abort generation via gateway client
         suppressGatewayFinalization = true
         gatewayFullText = ""
+        ttsSentUpToIndex = 0
         lastGatewaySeq = nil
         isGatewayToolExecuting = false
         finishGatewayResponse()
@@ -1199,6 +1205,7 @@ class ClawdyViewModel: ObservableObject {
                 self.streamingMessage = nil
                 self.streamingResponseText = ""
                 self.gatewayFullText = ""
+                self.ttsSentUpToIndex = 0
                 
                 self.messages = historyMessages
                 print("[ViewModel] Updated messages array, now has \(self.messages.count) messages")
@@ -1501,6 +1508,7 @@ class ClawdyViewModel: ObservableObject {
                 gatewayFullText = text
                 if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
                     incrementalTTS.appendText(text)
+                    ttsSentUpToIndex = text.count
                 }
             } else if text == gatewayFullText {
                 return
@@ -1513,6 +1521,7 @@ class ClawdyViewModel: ObservableObject {
                         let suffix = text.dropFirst(gatewayFullText.count)
                         if !suffix.isEmpty, inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
                             incrementalTTS.appendText(String(suffix))
+                            ttsSentUpToIndex = text.count
                         }
                     }
                     gatewayFullText = text
@@ -1524,12 +1533,22 @@ class ClawdyViewModel: ObservableObject {
                         gatewayFullText += suffix
                         if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
                             incrementalTTS.appendText(String(suffix))
+                            ttsSentUpToIndex = gatewayFullText.count
                         }
                     }
                 } else {
+                    // Fallback: text doesn't prefix-match gatewayFullText.
+                    // This commonly happens after tool calls when the gateway re-sends
+                    // accumulated text with minor whitespace differences.
+                    // Use ttsSentUpToIndex to only speak genuinely new content,
+                    // preventing the TTS repeat/loop bug.
                     gatewayFullText += text
                     if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                        incrementalTTS.appendText(text)
+                        let newContent = String(gatewayFullText.dropFirst(ttsSentUpToIndex))
+                        if !newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            incrementalTTS.appendText(newContent)
+                            ttsSentUpToIndex = gatewayFullText.count
+                        }
                     }
                 }
             }
@@ -1595,17 +1614,20 @@ class ClawdyViewModel: ObservableObject {
                     || !normalizedFinal.hasPrefix(normalizedCurrent)
 
                 if shouldReplace {
-                    // Check if finalText has content beyond what we already sent to TTS
-                    if finalText.count > gatewayFullText.count && finalText.hasPrefix(gatewayFullText) {
-                        let missingSuffix = String(finalText.dropFirst(gatewayFullText.count))
-                        if !missingSuffix.isEmpty && inputMode == .voice && !isGatewayToolExecuting {
-                            print("[TTS] Final text has additional content: '\(missingSuffix)'")
+                    // Use ttsSentUpToIndex to determine what's genuinely new,
+                    // preventing re-speaking after tool calls.
+                    if finalText.count > ttsSentUpToIndex && inputMode == .voice && !isGatewayToolExecuting {
+                        let missingSuffix = String(finalText.dropFirst(ttsSentUpToIndex))
+                        if !missingSuffix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            print("[TTS] Final text has additional content beyond TTS index \(ttsSentUpToIndex): '\(missingSuffix.prefix(80))'")
                             incrementalTTS.appendText(missingSuffix)
+                            ttsSentUpToIndex = finalText.count
                         }
-                    } else if gatewayFullText.isEmpty && inputMode == .voice && !isGatewayToolExecuting {
-                        // No deltas were received, send the entire final text
-                        print("[TTS] No deltas received, sending entire final text")
+                    } else if ttsSentUpToIndex == 0 && inputMode == .voice && !isGatewayToolExecuting {
+                        // No deltas were received/sent to TTS, send the entire final text
+                        print("[TTS] No deltas sent to TTS, sending entire final text")
                         incrementalTTS.appendText(finalText)
+                        ttsSentUpToIndex = finalText.count
                     }
                     gatewayFullText = finalText
                     streamingResponseText = finalText
@@ -1691,6 +1713,7 @@ class ClawdyViewModel: ObservableObject {
         finalizeCancelledStreamingMessage(marker: "[connection lost]")
         suppressGatewayFinalization = true
         gatewayFullText = ""
+        ttsSentUpToIndex = 0
         lastGatewaySeq = nil
         isGatewayToolExecuting = false
         streamingMessage = nil
@@ -1737,6 +1760,7 @@ class ClawdyViewModel: ObservableObject {
         streamingResponseText = ""
         streamingMessage = nil
         gatewayFullText = ""
+        ttsSentUpToIndex = 0
         lastGatewaySeq = nil
         isGatewayToolExecuting = false
         if inputMode == .voice {
@@ -1849,6 +1873,7 @@ class ClawdyViewModel: ObservableObject {
             // Send abort signal to the gateway
             suppressGatewayFinalization = true
             gatewayFullText = ""
+            ttsSentUpToIndex = 0
             lastGatewaySeq = nil
             isGatewayToolExecuting = false
             finishGatewayResponse()
