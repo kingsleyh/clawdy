@@ -651,6 +651,13 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                 await MainActor.run {
                     self.handleSpeechComplete()
                 }
+            } catch is CancellationError {
+                // CancellationError is expected when playback is interrupted
+                // by the next sentence — just proceed to handleSpeechComplete
+                print("[IncrementalTTSManager] ElevenLabs playback cancelled (expected)")
+                await MainActor.run {
+                    self.handleSpeechComplete()
+                }
             } catch {
                 print("[IncrementalTTSManager] ElevenLabs error: \(error), falling back to system TTS")
                 await MainActor.run {
