@@ -311,9 +311,10 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         // Stop system synthesizer
         systemSynthesizer.stopSpeaking(at: .immediate)
         
-        // Stop Kokoro playback
+        // Stop Kokoro and ElevenLabs playback
         Task {
             await kokoroManager.stopPlayback()
+            await ElevenLabsTTSManager.shared.stop()
         }
         
         speechQueue.removeAll()
@@ -664,6 +665,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     }
 
     /// Speak a sentence using ElevenLabs cloud TTS.
+    /// Uses pipeline parallelism: plays prefetched audio if available, prefetches next sentence during playback.
     /// Falls back to system TTS if ElevenLabs is not configured.
     private func speakWithElevenLabs(_ sentence: String) {
         kokoroSpeechTask = Task { [weak self] in
@@ -671,7 +673,6 @@ class IncrementalTTSManager: NSObject, ObservableObject {
 
             let elevenLabs = ElevenLabsTTSManager.shared
 
-            // Check if ElevenLabs is configured
             let isConfigured = await elevenLabs.isConfigured
 
             guard isConfigured else {
@@ -683,9 +684,9 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             }
 
             do {
-                // Configure audio session
                 await MainActor.run {
                     self.configureAudioSession()
+                    self.isGeneratingAudio = true
                 }
 
                 BackgroundAudioManager.shared.audioStarted()
@@ -695,22 +696,52 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                 }
                 let speed = await MainActor.run { voiceSettings.settings.speechRate }
 
-                print("[IncrementalTTSManager] Speaking with ElevenLabs: \(sentence.prefix(30))...")
-                try await elevenLabs.speak(text: sentence, voiceId: voiceId, speed: speed)
+                // Check if we have prefetched audio for this sentence (pipeline parallelism)
+                let maybePrefetched: AVAudioPCMBuffer? = await MainActor.run {
+                    if let prefetched = self.prefetchedAudio,
+                       self.prefetchedSentence == sentence {
+                        self.prefetchedAudio = nil
+                        self.prefetchedSentence = nil
+                        return prefetched
+                    }
+                    return nil
+                }
+
+                if let prefetchedBuffer = maybePrefetched {
+                    // Play prefetched audio — no API wait!
+                    print("[IncrementalTTSManager] Using prefetched ElevenLabs audio for: \(sentence.prefix(30))...")
+
+                    // Start prefetching next sentence before playing
+                    await MainActor.run { self.startPrefetchingNextSentence(speed: speed) }
+
+                    try await elevenLabs.playAudioBuffer(prefetchedBuffer)
+                } else {
+                    // Stream from API
+                    print("[IncrementalTTSManager] Streaming ElevenLabs audio for: \(sentence.prefix(30))...")
+
+                    // Start prefetching next sentence early
+                    await MainActor.run { self.startPrefetchingNextSentence(speed: speed) }
+
+                    try await elevenLabs.speak(text: sentence, voiceId: voiceId, speed: speed)
+                }
+
+                // Brief pause between utterances for natural pacing
+                try await Task.sleep(for: .milliseconds(100))
 
                 await MainActor.run {
+                    self.isGeneratingAudio = false
                     self.handleSpeechComplete()
                 }
             } catch is CancellationError {
-                // CancellationError is expected when playback is interrupted
-                // by the next sentence — just proceed to handleSpeechComplete
                 print("[IncrementalTTSManager] ElevenLabs playback cancelled (expected)")
                 await MainActor.run {
+                    self.isGeneratingAudio = false
                     self.handleSpeechComplete()
                 }
             } catch {
                 print("[IncrementalTTSManager] ElevenLabs error: \(error), falling back to system TTS")
                 await MainActor.run {
+                    self.isGeneratingAudio = false
                     self.speakWithSystem(sentence)
                 }
             }
@@ -870,12 +901,29 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         
         print("[IncrementalTTSManager] Prefetching next sentence: \(nextSentence.prefix(30))...")
         
+        let preferredEngine = voiceSettings.settings.ttsEngine
+
         prefetchTask = Task { [weak self] in
             guard let self = self else { return }
-            
+
             do {
-                let buffer = try await self.kokoroManager.generateAudio(text: nextSentence, speed: speed)
-                
+                let buffer: AVAudioPCMBuffer
+
+                switch preferredEngine {
+                case .elevenLabs:
+                    let voiceId = await MainActor.run {
+                        self.voiceSettings.settings.elevenLabsVoiceId ?? "EXAVITQu4vr4xnSDxMaL"
+                    }
+                    buffer = try await ElevenLabsTTSManager.shared.generateAudio(
+                        text: nextSentence, voiceId: voiceId, speed: speed
+                    )
+                case .kokoro:
+                    buffer = try await self.kokoroManager.generateAudio(text: nextSentence, speed: speed)
+                default:
+                    // System and Edge TTS don't support prefetch
+                    return
+                }
+
                 // Store prefetched audio (if not cancelled)
                 if !Task.isCancelled {
                     await MainActor.run {

@@ -146,8 +146,14 @@ struct SyntaxHighlightedCodeBlock: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var highlightedText: AttributedString?
+    @State private var highlightedCode: String?
     @State private var detectedLanguage: String?
     @State private var copied = false
+
+    /// Whether the highlighted text is current (matches the code being displayed)
+    private var isHighlightCurrent: Bool {
+        highlightedText != nil && highlightedCode == code
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -176,26 +182,31 @@ struct SyntaxHighlightedCodeBlock: View {
             .padding(.top, 8)
             .padding(.bottom, 4)
 
-            // Code content
+            // Code content — always show plain text, overlay highlighted version when ready
             ScrollView(.horizontal, showsIndicators: false) {
-                if let highlighted = highlightedText {
+                if isHighlightCurrent, let highlighted = highlightedText {
                     Text(highlighted)
                         .font(.system(.caption, design: .monospaced))
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
+                        .transition(.opacity)
                 } else {
-                    // Fallback while highlighting loads
                     Text(code)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundColor(.primary)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeIn(duration: 0.3), value: isHighlightCurrent)
         }
         .background(Color(.tertiarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .task {
+        .task(id: code) {
+            // Debounce: wait for streaming to settle before highlighting
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
             await highlight()
         }
         .onChange(of: colorScheme) { _, _ in
@@ -205,23 +216,26 @@ struct SyntaxHighlightedCodeBlock: View {
 
     /// Perform syntax highlighting asynchronously
     private func highlight() async {
+        let codeSnapshot = code
         let highlight = Highlight()
+        let colors: HighlightColors = colorScheme == .dark ? .dark(.github) : .light(.github)
         do {
             let result: HighlightResult
             if let language = language, !language.isEmpty {
                 // Use specified language
-                result = try await highlight.request(code, language: language)
+                result = try await highlight.request(codeSnapshot, mode: .languageAlias(language), colors: colors)
             } else {
                 // Auto-detect language
-                result = try await highlight.request(code)
+                result = try await highlight.request(codeSnapshot, colors: colors)
             }
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.highlightedText = result.attributedText
+                self.highlightedCode = codeSnapshot
                 self.detectedLanguage = result.language
             }
         } catch {
             print("[MarkdownMessageView] Syntax highlighting error: \(error)")
-            // Fallback: show plain text (already handled by the else branch above)
         }
     }
 
