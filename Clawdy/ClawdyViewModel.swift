@@ -411,6 +411,9 @@ class ClawdyViewModel: ObservableObject {
 
     private func loadContinuousMode() {
         isContinuousMode = UserDefaults.standard.bool(forKey: "com.clawdy.continuousMode")
+        // Sync background audio manager state on load so it knows about
+        // continuous mode from a previous session (persisted in UserDefaults)
+        BackgroundAudioManager.shared.setContinuousVoiceMode(isContinuousMode)
     }
 
     private func setupContinuousMode() {
@@ -721,6 +724,11 @@ class ClawdyViewModel: ObservableObject {
         // Explicitly set idle timer (didSet on @Published can be unreliable)
         UIApplication.shared.isIdleTimerDisabled = isContinuousMode
         print("[ContinuousMode] toggled to \(isContinuousMode), isIdleTimerDisabled = \(UIApplication.shared.isIdleTimerDisabled)")
+
+        // Notify BackgroundAudioManager so the app stays alive in background
+        // when continuous voice mode is active (allows voice chat while using
+        // other apps like Google Maps)
+        BackgroundAudioManager.shared.setContinuousVoiceMode(isContinuousMode)
 
         if isContinuousMode {
             // Start recording if not already recording or speaking

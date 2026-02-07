@@ -249,10 +249,11 @@ actor ElevenLabsTTSManager {
     func speak(text: String, voiceId: String, speed: Float = 1.0) async throws {
         let request = try makeStreamingRequest(text: text, voiceId: voiceId, speed: speed)
 
-        // Configure audio session
+        // Configure audio session for simultaneous recording and playback.
+        // Using .playAndRecord allows voice chat to continue in the background.
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playback, mode: .voicePrompt,
-            options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+        try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+            options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
         try audioSession.setActive(true)
 
         // Set up audio engine
@@ -385,8 +386,8 @@ actor ElevenLabsTTSManager {
     /// IncrementalTTSManager's prefetch pipeline.
     func playAudioBuffer(_ buffer: AVAudioPCMBuffer) async throws {
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playback, mode: .voicePrompt,
-            options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+        try audioSession.setCategory(.playAndRecord, mode: .voicePrompt,
+            options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
         try audioSession.setActive(true)
 
         try setupAudioEngine()
