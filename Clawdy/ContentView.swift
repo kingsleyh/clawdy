@@ -706,9 +706,25 @@ struct MessageBubble: View {
                     )
                 }
 
-                // Main message text (markdown for assistant, plain for user)
+                // Main message text (markdown + think tag parsing for assistant)
                 if !message.text.isEmpty {
-                    MarkdownMessageView(text: message.text, isUser: message.isUser)
+                    if message.isUser {
+                        MarkdownMessageView(text: message.text, isUser: true)
+                    } else if AssistantTextParser.containsThinkTags(message.text) {
+                        // Parse think tags and render segments separately
+                        let segments = AssistantTextParser.parse(message.text)
+                        ForEach(segments) { segment in
+                            switch segment {
+                            case .thinking(let text):
+                                ThinkingBlockView(text: text)
+                            case .response(let text):
+                                MarkdownMessageView(text: text, isUser: false)
+                            }
+                        }
+                    } else {
+                        // No think tags — render as markdown directly
+                        MarkdownMessageView(text: message.text, isUser: false)
+                    }
                 }
 
                 // Inline tool calls (only for Claude's messages)
