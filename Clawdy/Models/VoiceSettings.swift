@@ -66,6 +66,9 @@ struct VoiceSettings: Codable, Equatable {
     /// Edge TTS voice display name
     var edgeTTSVoiceDisplayName: String?
 
+    /// TTS output volume (0.0 = silent, 1.0 = full volume)
+    var ttsVolume: Float = 1.0
+
     /// Default settings
     static let `default` = VoiceSettings(
         ttsEngine: .system,

@@ -87,18 +87,19 @@ class BackgroundAudioManager: ObservableObject {
     /// Activate an audio session configured for background voice chat.
     /// Uses .playAndRecord to support simultaneous mic input and speaker output,
     /// with .defaultToSpeaker so audio comes from the main speaker (not earpiece),
-    /// and .allowBluetooth for AirPods / car Bluetooth support.
+    /// .allowBluetooth for AirPods / car Bluetooth support,
+    /// and .duckOthers so other apps' audio (Spotify, Apple Music) plays at reduced volume.
     private func activateBackgroundAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(
                 .playAndRecord,
-                mode: .voiceChat,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
+                mode: .default,
+                options: [.defaultToSpeaker, .allowBluetoothA2DP, .duckOthers]
             )
             try session.setActive(true)
 
-            print("[BackgroundAudioManager] Activated background voice session (playAndRecord)")
+            print("[BackgroundAudioManager] Activated background voice session (playAndRecord, duckOthers)")
         } catch {
             print("[BackgroundAudioManager] Failed to activate background audio session: \(error)")
         }

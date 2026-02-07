@@ -44,17 +44,51 @@ actor ElevenLabsTTSManager {
         ("VR6AewLTigWG4xSOukaG", "Arnold", "Strong, confident male voice"),
     ]
 
+    /// Whether we've already migrated the keychain item this session
+    private var didMigrateKeychain = false
+
     // MARK: - API Key Management
+
+    /// Migrate existing keychain item to use kSecAttrAccessibleAfterFirstUnlock
+    /// so the API key is readable when the device is locked (background voice mode).
+    private func migrateKeychainAccessibilityIfNeeded() {
+        guard !didMigrateKeychain else { return }
+        didMigrateKeychain = true
+
+        // Read existing key with current accessibility
+        guard let existingKey = getApiKey() else { return }
+
+        // Re-save with correct accessibility
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: keychainKey
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: keychainKey,
+            kSecValueData as String: existingKey.data(using: .utf8)!,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
+        print("[ElevenLabsTTSManager] Migrated API key to afterFirstUnlock accessibility")
+    }
 
     func saveApiKey(_ key: String) {
         let data = key.data(using: .utf8)!
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: keychainKey
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: keychainKey,
-            kSecValueData as String: data
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
-
-        SecItemDelete(query as CFDictionary)
         SecItemAdd(query as CFDictionary, nil)
 
         Task { @MainActor in
@@ -95,7 +129,8 @@ actor ElevenLabsTTSManager {
     }
 
     var isConfigured: Bool {
-        getApiKey() != nil
+        migrateKeychainAccessibilityIfNeeded()
+        return getApiKey() != nil
     }
 
     // MARK: - Audio Engine Setup
@@ -271,6 +306,10 @@ actor ElevenLabsTTSManager {
         // Stop any previous playback
         player.stop()
 
+        // Apply configured volume
+        let volume = await MainActor.run { VoiceSettingsManager.shared.settings.ttsVolume }
+        player.volume = volume
+
         // Start engine (but NOT the player yet — wait for first chunk to avoid empty-player pop)
         if !engine.isRunning {
             try engine.start()
@@ -407,6 +446,10 @@ actor ElevenLabsTTSManager {
         }
 
         engine.connect(player, to: engine.mainMixerNode, format: buffer.format)
+
+        // Apply configured volume
+        let volume = await MainActor.run { VoiceSettingsManager.shared.settings.ttsVolume }
+        player.volume = volume
 
         if !engine.isRunning {
             try engine.start()

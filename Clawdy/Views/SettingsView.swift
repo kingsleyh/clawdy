@@ -87,6 +87,28 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
 
+                    // Volume slider
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Volume")
+                            Spacer()
+                            Text("\(Int(voiceSettings.settings.ttsVolume * 100))%")
+                                .foregroundColor(.secondary)
+                        }
+                        HStack {
+                            Image(systemName: "speaker")
+                                .foregroundColor(.secondary)
+                            Slider(
+                                value: $voiceSettings.settings.ttsVolume,
+                                in: 0.0...1.0,
+                                step: 0.05
+                            )
+                            Image(systemName: "speaker.wave.3")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+
                     // Voice selection - show different picker based on engine
                     switch voiceSettings.settings.ttsEngine {
                     case .system:

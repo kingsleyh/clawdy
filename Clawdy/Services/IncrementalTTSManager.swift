@@ -968,7 +968,7 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         
         // Slightly lower pitch for warmer, more natural sound
         utterance.pitchMultiplier = 0.95
-        utterance.volume = 1.0
+        utterance.volume = voiceSettings.settings.ttsVolume
         
         // Natural pauses between utterances for comfortable listening.
         // Pre-utterance delay: brief pause before starting new sentence.

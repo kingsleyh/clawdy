@@ -175,7 +175,7 @@ class UnifiedTTSManager: ObservableObject {
         let rateMultiplier = voiceSettings.settings.speechRate
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * rateMultiplier * 0.92
         utterance.pitchMultiplier = 0.95
-        utterance.volume = 1.0
+        utterance.volume = voiceSettings.settings.ttsVolume
         utterance.preUtteranceDelay = 0.15
         utterance.postUtteranceDelay = 0.05
         

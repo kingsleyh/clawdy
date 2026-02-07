@@ -154,6 +154,7 @@ actor EdgeTTSManager {
     /// Speak text using Edge TTS.
     func speak(text: String, voiceId: String, speed: Float = 1.0) async throws {
         let audioData = try await generateAudio(text: text, voiceId: voiceId, speed: speed)
+        let volume = await MainActor.run { VoiceSettingsManager.shared.settings.ttsVolume }
 
         print("[EdgeTTS] Playing audio data: \(audioData.count) bytes")
 
@@ -178,6 +179,7 @@ actor EdgeTTSManager {
                 player.delegate = delegate
                 objc_setAssociatedObject(player, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
 
+                player.volume = volume
                 player.play()
             } catch {
                 continuation.resume(throwing: error)

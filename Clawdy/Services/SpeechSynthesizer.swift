@@ -53,7 +53,7 @@ class SpeechSynthesizer: NSObject, ObservableObject {
         
         // Pitch slightly lower for a warmer, more natural sound
         utterance.pitchMultiplier = 0.95
-        utterance.volume = 1.0
+        utterance.volume = voiceSettings.settings.ttsVolume
 
         // Small pause before speaking for natural feel
         utterance.preUtteranceDelay = 0.15

@@ -849,6 +849,8 @@ actor KokoroTTSManager {
             // Connect and start on first chunk
             if isFirstChunk {
                 engine.connect(player, to: engine.mainMixerNode, format: buffer.format)
+                let volume = await MainActor.run { VoiceSettingsManager.shared.settings.ttsVolume }
+                player.volume = volume
                 try engine.start()
                 player.play()
                 isFirstChunk = false
@@ -1118,7 +1120,11 @@ actor KokoroTTSManager {
         
         // Connect player to mixer
         engine.connect(player, to: engine.mainMixerNode, format: buffer.format)
-        
+
+        // Apply configured volume
+        let volume = await MainActor.run { VoiceSettingsManager.shared.settings.ttsVolume }
+        player.volume = volume
+
         // Start engine
         try engine.start()
         
