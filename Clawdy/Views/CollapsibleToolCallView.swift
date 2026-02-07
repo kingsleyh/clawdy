@@ -35,17 +35,22 @@ struct CollapsibleToolCallView: View {
                         .foregroundColor(.secondary)
                         .frame(width: 12)
                     
-                    // Tool name with colon, followed by input: "bash: ls -la"
+                    // Tool emoji + name with colon, followed by input: "🛠️ Bash: ls -la"
                     HStack(spacing: 0) {
-                        Text(formattedToolName)
+                        let toolDisplay = ToolDisplayRegistry.display(for: toolCall.name)
+                        Text(toolDisplay.emoji)
+                            .font(.caption)
+                        Text(" ")
+                            .font(.caption)
+                        Text(toolDisplay.name)
                             .font(.caption)
                             .fontWeight(.medium)
-                            .foregroundColor(iconColor)
+                            .foregroundColor(toolDisplay.color)
                         
                         Text(":")
                             .font(.caption)
                             .fontWeight(.medium)
-                            .foregroundColor(iconColor)
+                            .foregroundColor(toolDisplay.color)
                         
                         // Show input if available (truncated)
                         if let input = toolCall.input, !input.isEmpty {
@@ -147,29 +152,11 @@ struct CollapsibleToolCallView: View {
     // MARK: - Computed Properties
     
     private var formattedToolName: String {
-        let toolDisplayNames: [String: String] = [
-            "bash": "bash",
-            "read": "read",
-            "write": "write",
-            "edit": "edit",
-            "mcp": "mcp"
-        ]
-        return toolDisplayNames[toolCall.name.lowercased()] ?? toolCall.name
+        ToolDisplayRegistry.display(for: toolCall.name).name
     }
     
     private var iconColor: Color {
-        switch toolCall.name.lowercased() {
-        case "bash":
-            return .orange
-        case "read":
-            return .blue
-        case "write":
-            return .green
-        case "edit":
-            return .purple
-        default:
-            return .gray
-        }
+        ToolDisplayRegistry.display(for: toolCall.name).color
     }
     
     private var backgroundColor: Color {

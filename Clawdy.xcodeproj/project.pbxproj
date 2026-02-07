@@ -75,6 +75,7 @@
 		EE000003 /* ThinkingLevelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE000004 /* ThinkingLevelPicker.swift */; };
 		CC000001 /* AssistantTextParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000002 /* AssistantTextParser.swift */; };
 		CC000003 /* ThinkingBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000004 /* ThinkingBlockView.swift */; };
+		DD000001 /* ToolDisplayRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD000002 /* ToolDisplayRegistry.swift */; };
 		A10000E1 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -159,6 +160,7 @@
 		EE000004 /* ThinkingLevelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingLevelPicker.swift; sourceTree = "<group>"; };
 		CC000002 /* AssistantTextParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantTextParser.swift; sourceTree = "<group>"; };
 		CC000004 /* ThinkingBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingBlockView.swift; sourceTree = "<group>"; };
+		DD000002 /* ToolDisplayRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolDisplayRegistry.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -240,6 +242,7 @@
 				A2000041 /* NotificationManager.swift */,
 				A2000005 /* SpeechRecognizer.swift */,
 				A2000009 /* SpeechSynthesizer.swift */,
+				DD000002 /* ToolDisplayRegistry.swift */,
 				A200001D /* TTSTextNormalizer.swift */,
 				A2000011 /* VPNStatusMonitor.swift */,
 				A2000039 /* ImageAttachmentTests.swift */,
@@ -464,6 +467,7 @@
 				EE000003 /* ThinkingLevelPicker.swift in Sources */,
 				CC000001 /* AssistantTextParser.swift in Sources */,
 				CC000003 /* ThinkingBlockView.swift in Sources */,
+				DD000001 /* ToolDisplayRegistry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
