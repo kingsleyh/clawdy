@@ -154,16 +154,64 @@ class IncrementalTTSManager: NSObject, ObservableObject {
     
     // MARK: - Public API
     
+    /// Tracks whether we're currently inside a `<think>` block for TTS streaming.
+    /// Think block content is skipped from TTS since reading reasoning aloud is not useful.
+    private var inThinkBlock = false
+    
+    /// Buffer for detecting think tags that might be split across text chunks.
+    private var thinkTagBuffer = ""
+    
     /// Append incoming text to the buffer and speak complete sentences.
     /// Call this repeatedly as streaming text arrives.
     /// Code blocks (content between ``` markers) are tracked but not spoken.
+    /// Think blocks (`<think>...</think>`) are also skipped from TTS.
     /// - Parameter text: The new text chunk to append
     func appendText(_ text: String) {
         fullText += text
         
+        // Pre-filter: strip think tags from the text before TTS processing.
+        // Think tags contain model reasoning that shouldn't be read aloud.
+        // We handle both complete tags and streaming partial tags.
+        var filteredText = thinkTagBuffer + text
+        thinkTagBuffer = ""
+        
+        // Handle complete <think>...</think> blocks
+        while let startRange = filteredText.range(of: "<think>", options: .caseInsensitive) {
+            if let endRange = filteredText.range(of: "</think>", options: .caseInsensitive, range: startRange.upperBound..<filteredText.endIndex) {
+                // Remove complete think block
+                filteredText.removeSubrange(startRange.lowerBound..<endRange.upperBound)
+            } else {
+                // Unclosed think tag — buffer everything from <think> onwards
+                // (it may be completed in the next chunk)
+                thinkTagBuffer = String(filteredText[startRange.lowerBound...])
+                filteredText = String(filteredText[filteredText.startIndex..<startRange.lowerBound])
+                break
+            }
+        }
+        
+        // Handle </think> appearing without a preceding <think> in this chunk
+        // (the <think> was in a previous chunk that was already buffered)
+        if inThinkBlock, let endRange = filteredText.range(of: "</think>", options: .caseInsensitive) {
+            filteredText = String(filteredText[endRange.upperBound...])
+            inThinkBlock = false
+        }
+        
+        // If we found a <think> with no closing tag, mark that we're in a think block
+        if !thinkTagBuffer.isEmpty {
+            inThinkBlock = true
+        }
+        
+        // If we're inside a think block (waiting for </think>), skip all text
+        if inThinkBlock && thinkTagBuffer.isEmpty {
+            return
+        }
+        
+        // If nothing left after filtering, skip
+        guard !filteredText.isEmpty else { return }
+        
         // Process text character by character to handle code block detection
         // This handles cases where ``` might be split across chunks
-        let textToProcess = codeMarkerBuffer + text
+        let textToProcess = codeMarkerBuffer + filteredText
         codeMarkerBuffer = ""
         
         var index = textToProcess.startIndex
@@ -275,6 +323,8 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         isGeneratingAudio = false
         inCodeBlock = false
         codeMarkerBuffer = ""
+        inThinkBlock = false
+        thinkTagBuffer = ""
         pendingClause = nil
         updateState()
         BackgroundAudioManager.shared.audioEnded()

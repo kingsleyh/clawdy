@@ -73,6 +73,8 @@
 		A100004E /* EdgeTTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200004E /* EdgeTTSManager.swift */; };
 		EE000001 /* ThinkingLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE000002 /* ThinkingLevel.swift */; };
 		EE000003 /* ThinkingLevelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE000004 /* ThinkingLevelPicker.swift */; };
+		CC000001 /* AssistantTextParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000002 /* AssistantTextParser.swift */; };
+		CC000003 /* ThinkingBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000004 /* ThinkingBlockView.swift */; };
 		A10000E1 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A9000002 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -155,6 +157,8 @@
 		BB000004 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
 		EE000002 /* ThinkingLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingLevel.swift; sourceTree = "<group>"; };
 		EE000004 /* ThinkingLevelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingLevelPicker.swift; sourceTree = "<group>"; };
+		CC000002 /* AssistantTextParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantTextParser.swift; sourceTree = "<group>"; };
+		CC000004 /* ThinkingBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingBlockView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -211,6 +215,7 @@
 		A4000003 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				CC000002 /* AssistantTextParser.swift */,
 				A200000B /* AuthenticationManager.swift */,
 				A2000010 /* BackgroundAudioManager.swift */,
 				A2000042 /* CameraCapabilityService.swift */,
@@ -277,6 +282,7 @@
 				A200000D /* SettingsView.swift */,
 				A2000019 /* TextInputBar.swift */,
 				EE000004 /* ThinkingLevelPicker.swift */,
+				CC000004 /* ThinkingBlockView.swift */,
 				A200001C /* ToastView.swift */,
 			);
 			path = Views;
@@ -456,6 +462,8 @@
 				BB000003 /* MarkdownMessageView.swift in Sources */,
 				EE000001 /* ThinkingLevel.swift in Sources */,
 				EE000003 /* ThinkingLevelPicker.swift in Sources */,
+				CC000001 /* AssistantTextParser.swift in Sources */,
+				CC000003 /* ThinkingBlockView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
