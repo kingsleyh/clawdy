@@ -7,6 +7,7 @@ enum TTSEngine: String, Codable, CaseIterable {
     case kokoro = "kokoro"
     case elevenLabs = "elevenlabs"
     case edgeTTS = "edgetts"
+    case fishAudio = "fishaudio"
 
     var displayName: String {
         switch self {
@@ -14,6 +15,7 @@ enum TTSEngine: String, Codable, CaseIterable {
         case .kokoro: return "Kokoro"
         case .elevenLabs: return "11Labs"
         case .edgeTTS: return "Edge"
+        case .fishAudio: return "Fish"
         }
     }
 
@@ -23,6 +25,7 @@ enum TTSEngine: String, Codable, CaseIterable {
         case .kokoro: return "High-quality neural TTS (~150MB download)"
         case .elevenLabs: return "Premium cloud voices (requires API key)"
         case .edgeTTS: return "Free high-quality Microsoft neural voices"
+        case .fishAudio: return "High-quality cloud voices, ~10x cheaper than 11Labs (requires API key)"
         }
     }
 }
@@ -65,6 +68,12 @@ struct VoiceSettings: Codable, Equatable {
 
     /// Edge TTS voice display name
     var edgeTTSVoiceDisplayName: String?
+
+    /// Fish Audio voice reference ID
+    var fishAudioReferenceId: String?
+
+    /// Fish Audio voice display name
+    var fishAudioVoiceDisplayName: String?
 
     /// TTS output volume (0.0 = silent, 1.0 = full volume)
     var ttsVolume: Float = 1.0

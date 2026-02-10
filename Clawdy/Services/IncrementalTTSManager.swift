@@ -311,10 +311,11 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         // Stop system synthesizer
         systemSynthesizer.stopSpeaking(at: .immediate)
         
-        // Stop Kokoro and ElevenLabs playback
+        // Stop Kokoro, ElevenLabs, and Fish Audio playback
         Task {
             await kokoroManager.stopPlayback()
             await ElevenLabsTTSManager.shared.stop()
+            await FishAudioTTSManager.shared.stop()
         }
         
         speechQueue.removeAll()
@@ -659,6 +660,8 @@ class IncrementalTTSManager: NSObject, ObservableObject {
             speakWithElevenLabs(sentence)
         case .edgeTTS:
             speakWithEdgeTTS(sentence)
+        case .fishAudio:
+            speakWithFishAudio(sentence)
         case .system:
             speakWithSystem(sentence)
         }
@@ -748,6 +751,90 @@ class IncrementalTTSManager: NSObject, ObservableObject {
         }
     }
     
+    /// Speak a sentence using Fish Audio cloud TTS.
+    /// Uses pipeline parallelism: plays prefetched audio if available, prefetches next sentence during playback.
+    /// Falls back to system TTS if Fish Audio is not configured.
+    private func speakWithFishAudio(_ sentence: String) {
+        kokoroSpeechTask = Task { [weak self] in
+            guard let self = self else { return }
+
+            let fishAudio = FishAudioTTSManager.shared
+
+            let isConfigured = await fishAudio.isConfigured
+
+            guard isConfigured else {
+                print("[IncrementalTTSManager] Fish Audio not configured, falling back to system TTS")
+                await MainActor.run {
+                    self.speakWithSystem(sentence)
+                }
+                return
+            }
+
+            do {
+                await MainActor.run {
+                    self.configureAudioSession()
+                    self.isGeneratingAudio = true
+                }
+
+                BackgroundAudioManager.shared.audioStarted()
+
+                let referenceId = await MainActor.run {
+                    voiceSettings.settings.fishAudioReferenceId ?? "802e3bc2b27e49c2995d23ef70e6ac89"
+                }
+                let speed = await MainActor.run { voiceSettings.settings.speechRate }
+
+                // Check if we have prefetched audio for this sentence (pipeline parallelism)
+                let maybePrefetched: AVAudioPCMBuffer? = await MainActor.run {
+                    if let prefetched = self.prefetchedAudio,
+                       self.prefetchedSentence == sentence {
+                        self.prefetchedAudio = nil
+                        self.prefetchedSentence = nil
+                        return prefetched
+                    }
+                    return nil
+                }
+
+                if let prefetchedBuffer = maybePrefetched {
+                    // Play prefetched audio — no API wait!
+                    print("[IncrementalTTSManager] Using prefetched Fish Audio for: \(sentence.prefix(30))...")
+
+                    // Start prefetching next sentence before playing
+                    await MainActor.run { self.startPrefetchingNextSentence(speed: speed) }
+
+                    try await fishAudio.playAudioBuffer(prefetchedBuffer)
+                } else {
+                    // Stream from API
+                    print("[IncrementalTTSManager] Streaming Fish Audio for: \(sentence.prefix(30))...")
+
+                    // Start prefetching next sentence early
+                    await MainActor.run { self.startPrefetchingNextSentence(speed: speed) }
+
+                    try await fishAudio.speak(text: sentence, referenceId: referenceId, speed: speed)
+                }
+
+                // Brief pause between utterances for natural pacing
+                try await Task.sleep(for: .milliseconds(100))
+
+                await MainActor.run {
+                    self.isGeneratingAudio = false
+                    self.handleSpeechComplete()
+                }
+            } catch is CancellationError {
+                print("[IncrementalTTSManager] Fish Audio playback cancelled (expected)")
+                await MainActor.run {
+                    self.isGeneratingAudio = false
+                    self.handleSpeechComplete()
+                }
+            } catch {
+                print("[IncrementalTTSManager] Fish Audio error: \(error), falling back to system TTS")
+                await MainActor.run {
+                    self.isGeneratingAudio = false
+                    self.speakWithSystem(sentence)
+                }
+            }
+        }
+    }
+
     /// Speak a sentence using Edge TTS (free Microsoft neural voices).
     /// Falls back to system TTS on error.
     private func speakWithEdgeTTS(_ sentence: String) {
@@ -919,6 +1006,13 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                     )
                 case .kokoro:
                     buffer = try await self.kokoroManager.generateAudio(text: nextSentence, speed: speed)
+                case .fishAudio:
+                    let refId = await MainActor.run {
+                        self.voiceSettings.settings.fishAudioReferenceId ?? "802e3bc2b27e49c2995d23ef70e6ac89"
+                    }
+                    buffer = try await FishAudioTTSManager.shared.generateAudio(
+                        text: nextSentence, referenceId: refId, speed: speed
+                    )
                 default:
                     // System and Edge TTS don't support prefetch
                     return

@@ -156,6 +156,17 @@ struct SettingsView: View {
                                     .foregroundColor(.secondary)
                             }
                         }
+                    case .fishAudio:
+                        NavigationLink {
+                            FishAudioSettingsView(voiceSettings: voiceSettings)
+                        } label: {
+                            HStack {
+                                Text("Fish Audio Settings")
+                                Spacer()
+                                Text(voiceSettings.settings.fishAudioVoiceDisplayName ?? "Energetic Male")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
 
                     // Test voice button
@@ -404,6 +415,8 @@ struct SettingsView: View {
             testElevenLabsVoice()
         case .edgeTTS:
             testEdgeTTSVoice()
+        case .fishAudio:
+            testFishAudioVoice()
         case .system:
             testSystemVoice()
         }
@@ -421,6 +434,22 @@ struct SettingsView: View {
                 )
             } catch {
                 print("[TestVoice] Edge TTS error: \(error)")
+            }
+        }
+    }
+
+    /// Test the Fish Audio voice
+    private func testFishAudioVoice() {
+        Task {
+            do {
+                let referenceId = voiceSettings.settings.fishAudioReferenceId ?? "802e3bc2b27e49c2995d23ef70e6ac89"
+                try await FishAudioTTSManager.shared.speak(
+                    text: "Hello, I'm ready to help you with your tasks.",
+                    referenceId: referenceId,
+                    speed: voiceSettings.settings.speechRate
+                )
+            } catch {
+                print("[TestVoice] Fish Audio error: \(error)")
             }
         }
     }
@@ -1264,6 +1293,170 @@ struct ElevenLabsSettingsView: View {
                 try await ElevenLabsTTSManager.shared.speak(
                     text: "Hello! This is a test of the ElevenLabs voice.",
                     voiceId: voiceId
+                )
+                testResult = "Voice test successful"
+            } catch {
+                testResult = "Error: \(error.localizedDescription)"
+            }
+            isTesting = false
+        }
+    }
+}
+
+// MARK: - Fish Audio Settings View
+
+struct FishAudioSettingsView: View {
+    @ObservedObject var voiceSettings: VoiceSettingsManager
+    @State private var apiKey: String = ""
+    @State private var isConfigured: Bool = false
+    @State private var isTesting: Bool = false
+    @State private var testResult: String?
+    @State private var customReferenceId: String = ""
+
+    var body: some View {
+        Form {
+            Section {
+                SecureField("API Key", text: $apiKey)
+                    .textContentType(.password)
+                    .autocapitalization(.none)
+
+                if isConfigured {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("API Key configured")
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Button(apiKey.isEmpty ? "Save API Key" : "Update API Key") {
+                    saveApiKey()
+                }
+                .disabled(apiKey.isEmpty)
+
+                if isConfigured {
+                    Button("Remove API Key", role: .destructive) {
+                        removeApiKey()
+                    }
+                }
+            } header: {
+                Text("API Key")
+            } footer: {
+                Text("Get your API key from fish.audio")
+            }
+
+            Section {
+                ForEach(FishAudioTTSManager.popularVoices, id: \.id) { voice in
+                    Button {
+                        selectVoice(id: voice.id, name: voice.name)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(voice.name)
+                                    .foregroundColor(.primary)
+                                Text(voice.description)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if voiceSettings.settings.fishAudioReferenceId == voice.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Voice")
+            }
+
+            Section {
+                TextField("Reference ID", text: $customReferenceId)
+                    .autocapitalization(.none)
+                    .autocorrectionDisabled()
+
+                if !customReferenceId.isEmpty {
+                    Button("Use Custom Voice") {
+                        selectVoice(id: customReferenceId, name: "Custom")
+                        customReferenceId = ""
+                    }
+                }
+            } header: {
+                Text("Custom Voice")
+            } footer: {
+                Text("Paste a reference ID from fish.audio to use any community voice")
+            }
+
+            Section {
+                Button {
+                    testVoice()
+                } label: {
+                    HStack {
+                        if isTesting {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "speaker.wave.2")
+                        }
+                        Text("Test Voice")
+                    }
+                }
+                .disabled(!isConfigured || isTesting)
+
+                if let result = testResult {
+                    Text(result)
+                        .font(.caption)
+                        .foregroundColor(result.contains("Error") ? .red : .green)
+                }
+            } header: {
+                Text("Test")
+            }
+        }
+        .navigationTitle("Fish Audio")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await checkConfiguration()
+        }
+    }
+
+    private func checkConfiguration() async {
+        isConfigured = await FishAudioTTSManager.shared.isConfigured
+    }
+
+    private func saveApiKey() {
+        Task {
+            await FishAudioTTSManager.shared.saveApiKey(apiKey)
+            isConfigured = true
+            apiKey = "" // Clear for security
+            testResult = "API Key saved"
+        }
+    }
+
+    private func removeApiKey() {
+        Task {
+            await FishAudioTTSManager.shared.deleteApiKey()
+            isConfigured = false
+            testResult = nil
+        }
+    }
+
+    private func selectVoice(id: String, name: String) {
+        voiceSettings.settings.fishAudioReferenceId = id
+        voiceSettings.settings.fishAudioVoiceDisplayName = name
+    }
+
+    private func testVoice() {
+        guard isConfigured else { return }
+
+        isTesting = true
+        testResult = nil
+
+        Task {
+            do {
+                let referenceId = voiceSettings.settings.fishAudioReferenceId ?? "802e3bc2b27e49c2995d23ef70e6ac89"
+                try await FishAudioTTSManager.shared.speak(
+                    text: "Hello! This is a test of the Fish Audio voice.",
+                    referenceId: referenceId
                 )
                 testResult = "Voice test successful"
             } catch {
