@@ -850,16 +850,16 @@ class GatewayDualConnectionManager: ObservableObject {
               await connection.isConnected else {
             throw GatewayError.notConnected
         }
-        
+
         let idempotencyKey = UUID().uuidString
-        
+
         var params: [String: Any] = [
             "sessionKey": chatSessionKey,
             "message": text,
             "deliver": false,
             "idempotencyKey": idempotencyKey,
         ]
-        
+
         if let images = images, !images.isEmpty {
             params["attachments"] = images.map { imageData in
                 [
@@ -870,7 +870,7 @@ class GatewayDualConnectionManager: ObservableObject {
                 ]
             }
         }
-        
+
         let responseData = try await connection.request(method: "chat.send", params: params)
         if let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
            let runId = json["runId"] as? String {

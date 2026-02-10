@@ -7,6 +7,12 @@ import AVFoundation
 // Uses NSLock for safe cross-thread access, following BackgroundAudioManager's pattern.
 private let _interruptionLock = NSLock()
 private var _isMonitoringForInterruption = false
+
+// Thread-safe audio buffer accumulation for speaker diarization.
+// Buffers are appended on the audio render thread and consumed on the main thread.
+private let _bufferLock = NSLock()
+private var _accumulatedBuffers: [AVAudioPCMBuffer] = []
+private var _accumulatedFormat: AVAudioFormat?
 private var _consecutiveActiveFrames = 0
 private let _interruptionEnergyThreshold: Float = -30  // dB, low threshold — AEC removes TTS echo
 private let _requiredConsecutiveFrames = 4              // ~85ms at 1024 samples / 48kHz
@@ -201,6 +207,16 @@ class SpeechRecognizer: ObservableObject {
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
                 self?.recognitionRequest?.append(buffer)
 
+                // Accumulate audio buffers for speaker diarization
+                if let copy = Self.copyBuffer(buffer) {
+                    _bufferLock.lock()
+                    _accumulatedBuffers.append(copy)
+                    if _accumulatedFormat == nil {
+                        _accumulatedFormat = buffer.format
+                    }
+                    _bufferLock.unlock()
+                }
+
                 // VAD: check for user speech during TTS playback
                 self?.processBufferForInterruption(buffer)
             }
@@ -210,6 +226,12 @@ class SpeechRecognizer: ObservableObject {
         }
 
         transcribedText = ""
+
+        // Clear accumulated audio for new recording session
+        _bufferLock.lock()
+        _accumulatedBuffers.removeAll()
+        _accumulatedFormat = nil
+        _bufferLock.unlock()
 
         // Start 1-minute timeout timer
         recognitionStartTime = Date()
@@ -319,6 +341,17 @@ class SpeechRecognizer: ObservableObject {
             let recordingFormat = audioEngine.inputNode.outputFormat(forBus: 0)
             audioEngine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
                 self?.recognitionRequest?.append(buffer)
+
+                // Accumulate audio buffers for speaker diarization
+                if let copy = Self.copyBuffer(buffer) {
+                    _bufferLock.lock()
+                    _accumulatedBuffers.append(copy)
+                    if _accumulatedFormat == nil {
+                        _accumulatedFormat = buffer.format
+                    }
+                    _bufferLock.unlock()
+                }
+
                 self?.processBufferForInterruption(buffer)
             }
             audioEngine.prepare()
@@ -352,6 +385,57 @@ class SpeechRecognizer: ObservableObject {
     func startSilenceDetection() {
         lastTranscriptionTime = Date()
         resetSilenceTimer()
+    }
+
+    // MARK: - Audio Buffer Accumulation (for Speaker Diarization)
+
+    /// Retrieve accumulated audio buffers merged into a single PCM buffer, then clear.
+    /// Returns nil if no audio was accumulated.
+    nonisolated func getAccumulatedAudio() -> AVAudioPCMBuffer? {
+        _bufferLock.lock()
+        let buffers = _accumulatedBuffers
+        let format = _accumulatedFormat
+        _accumulatedBuffers.removeAll()
+        _accumulatedFormat = nil
+        _bufferLock.unlock()
+
+        guard let format = format, !buffers.isEmpty else { return nil }
+
+        let totalFrames = buffers.reduce(0) { $0 + Int($1.frameLength) }
+        guard totalFrames > 0,
+              let merged = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(totalFrames))
+        else { return nil }
+
+        var offset: AVAudioFrameCount = 0
+        for buf in buffers {
+            let frames = buf.frameLength
+            guard frames > 0 else { continue }
+            for ch in 0..<Int(format.channelCount) {
+                guard let src = buf.floatChannelData?[ch],
+                      let dst = merged.floatChannelData?[ch]
+                else { continue }
+                memcpy(dst.advanced(by: Int(offset)), src, Int(frames) * MemoryLayout<Float>.size)
+            }
+            offset += frames
+        }
+        merged.frameLength = offset
+        return merged
+    }
+
+    /// Copy a PCM buffer (for safe accumulation from the audio render thread).
+    private nonisolated static func copyBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) else {
+            return nil
+        }
+        copy.frameLength = buffer.frameLength
+        let channels = Int(buffer.format.channelCount)
+        for ch in 0..<channels {
+            guard let src = buffer.floatChannelData?[ch],
+                  let dst = copy.floatChannelData?[ch]
+            else { return nil }
+            memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
+        }
+        return copy
     }
 
     // MARK: - Voice Interruption Detection

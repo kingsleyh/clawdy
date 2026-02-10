@@ -81,6 +81,12 @@ struct VoiceSettings: Codable, Equatable {
     /// Convenience accessor (defaults to false)
     var isVoiceInterruptionEnabled: Bool { voiceInterruptionEnabled ?? false }
 
+    /// Whether speaker identification (diarization) is enabled
+    var speakerIdentificationEnabled: Bool?
+
+    /// Convenience accessor (defaults to false)
+    var isSpeakerIdentificationEnabled: Bool { speakerIdentificationEnabled ?? false }
+
     /// TTS output volume (0.0 = silent, 1.0 = full volume)
     var ttsVolume: Float = 1.0
 

@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import Combine
 import SwiftUI
 import UIKit
@@ -708,6 +709,7 @@ class ClawdyViewModel: ObservableObject {
     func stopRecording() {
         isRecording = false
         let transcription = speechRecognizer.stopRecording()
+        let audioBuffer = speechRecognizer.getAccumulatedAudio()
 
         guard !transcription.isEmpty else {
             // In continuous mode, silently restart without error message
@@ -723,8 +725,7 @@ class ClawdyViewModel: ObservableObject {
             return
         }
 
-        addMessage(transcription, isUser: true)
-        sendCommand(transcription)
+        diarizeAndSend(transcription: transcription, audioBuffer: audioBuffer)
     }
 
     /// Called by silence detection in continuous mode
@@ -732,6 +733,7 @@ class ClawdyViewModel: ObservableObject {
         guard isRecording else { return }
         isRecording = false
         let transcription = speechRecognizer.stopRecording()
+        let audioBuffer = speechRecognizer.getAccumulatedAudio()
 
         guard !transcription.isEmpty else {
             // Restart recording if no speech detected in continuous mode
@@ -743,9 +745,73 @@ class ClawdyViewModel: ObservableObject {
             return
         }
 
-        addMessage(transcription, isUser: true)
-        sendCommand(transcription)
+        diarizeAndSend(transcription: transcription, audioBuffer: audioBuffer)
         // Recording will restart after TTS finishes via the isSpeaking observer
+    }
+
+    /// Run speaker diarization (if enabled) then send the message.
+    /// Falls back to plain transcription if diarization is disabled or fails.
+    private func diarizeAndSend(transcription: String, audioBuffer: AVAudioPCMBuffer?) {
+        let diarizationEnabled = VoiceSettingsManager.shared.settings.isSpeakerIdentificationEnabled
+
+        if !diarizationEnabled {
+            addMessage(transcription, isUser: true)
+            sendCommand(transcription)
+            return
+        }
+
+        guard let audioBuffer = audioBuffer else {
+            print("[Diarization] No accumulated audio buffer — sending plain transcription")
+            addMessage(transcription, isUser: true)
+            sendCommand(transcription)
+            return
+        }
+
+        // Run diarization asynchronously
+        Task {
+            let diarizationManager = SpeakerDiarizationManager.shared
+
+            // Ensure models are loaded (first use triggers download)
+            if !diarizationManager.isModelReady {
+                do {
+                    try await diarizationManager.prepareModels()
+                } catch {
+                    print("[Diarization] Model load failed: \(error)")
+                    addMessage(transcription, isUser: true)
+                    sendCommand(transcription)
+                    return
+                }
+            }
+
+            do {
+                print("[Diarization] Running on \(audioBuffer.frameLength) frames...")
+                let result = try await diarizationManager.diarize(
+                    audioBuffer: audioBuffer,
+                    transcription: transcription
+                )
+                print("[Diarization] Result: multiSpeaker=\(result.isMultiSpeaker), speakers=\(result.speakerNames)")
+
+                if result.isMultiSpeaker {
+                    // Multi-speaker: inline labels give AI speaker context
+                    addMessage(result.labeledText, isUser: true)
+                    sendCommand(result.labeledText)
+                } else if let speakerName = result.speakerNames.first, !speakerName.isEmpty {
+                    // Single known speaker: prepend speaker label
+                    let labeled = "[\(speakerName)]: \(transcription)"
+                    print("[Diarization] Labeled: \(labeled)")
+                    addMessage(labeled, isUser: true)
+                    sendCommand(labeled)
+                } else {
+                    // No speaker identified
+                    addMessage(transcription, isUser: true)
+                    sendCommand(transcription)
+                }
+            } catch {
+                print("[Diarization] Failed: \(error) — sending plain transcription")
+                addMessage(transcription, isUser: true)
+                sendCommand(transcription)
+            }
+        }
     }
 
     /// Toggle continuous conversation mode
@@ -1142,7 +1208,6 @@ class ClawdyViewModel: ObservableObject {
         if isCurrentlyStreaming {
             interruptCurrentResponse()
         }
-        
 
         Task {
             await sendCommandWithGateway(command, images: images)

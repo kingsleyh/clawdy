@@ -184,10 +184,28 @@ struct SettingsView: View {
                         get: { voiceSettings.settings.isVoiceInterruptionEnabled },
                         set: { voiceSettings.settings.voiceInterruptionEnabled = $0 }
                     ))
+
+                    Toggle("Speaker Identification", isOn: Binding(
+                        get: { voiceSettings.settings.isSpeakerIdentificationEnabled },
+                        set: { voiceSettings.settings.speakerIdentificationEnabled = $0 }
+                    ))
+
+                    if voiceSettings.settings.isSpeakerIdentificationEnabled {
+                        NavigationLink {
+                            SpeakerManagementView()
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.2.wave.2")
+                                Text("Manage Speakers")
+                            }
+                        }
+                    }
                 } header: {
                     Text("Voice")
                 } footer: {
-                    if voiceSettings.settings.isVoiceInterruptionEnabled {
+                    if voiceSettings.settings.isSpeakerIdentificationEnabled {
+                        Text("Speaker identification enabled — Clawdy will identify who is speaking and label messages with speaker names")
+                    } else if voiceSettings.settings.isVoiceInterruptionEnabled {
                         Text("Voice interruption enabled — speaking will automatically stop AI playback in continuous voice mode")
                     } else {
                         Text("Adjust how Claude speaks responses back to you")

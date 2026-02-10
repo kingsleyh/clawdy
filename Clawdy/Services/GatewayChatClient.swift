@@ -74,7 +74,7 @@ actor GatewayChatClient {
         // Send via unified WebSocket connection
         let runId = try await connectionManager.sendMessage(text, images: imageData)
         currentRunId = runId
-        
+
         return SendResponse(runId: runId, sessionKey: sessionKey)
     }
 
