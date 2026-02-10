@@ -742,10 +742,19 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                     self.handleSpeechComplete()
                 }
             } catch {
-                print("[IncrementalTTSManager] ElevenLabs error: \(error), falling back to system TTS")
-                await MainActor.run {
-                    self.isGeneratingAudio = false
-                    self.speakWithSystem(sentence)
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                    print("[IncrementalTTSManager] ElevenLabs request cancelled (expected)")
+                    await MainActor.run {
+                        self.isGeneratingAudio = false
+                        self.handleSpeechComplete()
+                    }
+                } else {
+                    print("[IncrementalTTSManager] ElevenLabs error: \(error), falling back to system TTS")
+                    await MainActor.run {
+                        self.isGeneratingAudio = false
+                        self.speakWithSystem(sentence)
+                    }
                 }
             }
         }
@@ -826,10 +835,21 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                     self.handleSpeechComplete()
                 }
             } catch {
-                print("[IncrementalTTSManager] Fish Audio error: \(error), falling back to system TTS")
-                await MainActor.run {
-                    self.isGeneratingAudio = false
-                    self.speakWithSystem(sentence)
+                // URLSession cancellation (Code=-999) happens during voice interruption —
+                // treat it the same as CancellationError, don't fall back to system TTS.
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                    print("[IncrementalTTSManager] Fish Audio request cancelled (expected)")
+                    await MainActor.run {
+                        self.isGeneratingAudio = false
+                        self.handleSpeechComplete()
+                    }
+                } else {
+                    print("[IncrementalTTSManager] Fish Audio error: \(error), falling back to system TTS")
+                    await MainActor.run {
+                        self.isGeneratingAudio = false
+                        self.speakWithSystem(sentence)
+                    }
                 }
             }
         }
@@ -860,9 +880,17 @@ class IncrementalTTSManager: NSObject, ObservableObject {
                     self.handleSpeechComplete()
                 }
             } catch {
-                print("[IncrementalTTSManager] Edge TTS error: \(error), falling back to system TTS")
-                await MainActor.run {
-                    self.speakWithSystem(sentence)
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                    print("[IncrementalTTSManager] Edge TTS request cancelled (expected)")
+                    await MainActor.run {
+                        self.handleSpeechComplete()
+                    }
+                } else {
+                    print("[IncrementalTTSManager] Edge TTS error: \(error), falling back to system TTS")
+                    await MainActor.run {
+                        self.speakWithSystem(sentence)
+                    }
                 }
             }
         }

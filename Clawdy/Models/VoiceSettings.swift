@@ -75,6 +75,12 @@ struct VoiceSettings: Codable, Equatable {
     /// Fish Audio voice display name
     var fishAudioVoiceDisplayName: String?
 
+    /// Whether voice interruption (barge-in) is enabled in continuous mode
+    var voiceInterruptionEnabled: Bool?
+
+    /// Convenience accessor (defaults to false)
+    var isVoiceInterruptionEnabled: Bool { voiceInterruptionEnabled ?? false }
+
     /// TTS output volume (0.0 = silent, 1.0 = full volume)
     var ttsVolume: Float = 1.0
 

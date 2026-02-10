@@ -443,6 +443,11 @@ class ClawdyViewModel: ObservableObject {
             self.isRecording = false
             self.restartRecordingWithRecovery()
         }
+
+        // Set up voice interruption callback (barge-in during TTS playback)
+        speechRecognizer.onSpeechInterruptionDetected = { [weak self] in
+            self?.handleVoiceInterruption()
+        }
     }
 
     /// Restart recording with error recovery and exponential backoff
@@ -511,9 +516,26 @@ class ClawdyViewModel: ObservableObject {
                 let wasSpeaking = self.isSpeaking
                 self.isSpeaking = speaking
 
-                // Auto-restart recording when TTS finishes in continuous mode
-                if wasSpeaking && !speaking && self.isContinuousMode {
-                    self.restartRecordingForContinuousMode()
+                // Voice interruption: monitor mic for speech during TTS playback.
+                // startInterruptionMonitoring() is a no-op if already active (preserves grace period).
+                if speaking && self.isContinuousMode
+                    && VoiceSettingsManager.shared.settings.isVoiceInterruptionEnabled {
+                    self.speechRecognizer.startInterruptionMonitoring()
+                }
+                if wasSpeaking && !speaking {
+                    // Debounce stopping interruption monitoring — isSpeaking briefly goes false
+                    // between sentences during incremental TTS. Wait 600ms before stopping;
+                    // if isSpeaking goes back to true (next sentence), monitoring continues
+                    // with the original grace period intact.
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .milliseconds(600))
+                        guard let self = self, !self.isSpeaking else { return }
+                        self.speechRecognizer.stopInterruptionMonitoring()
+                    }
+                    // Auto-restart recording when TTS finishes in continuous mode
+                    if self.isContinuousMode {
+                        self.restartRecordingForContinuousMode()
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -1164,6 +1186,24 @@ class ClawdyViewModel: ObservableObject {
         processingState = .idle
     }
     
+    /// Handle voice interruption detected by VAD during TTS playback.
+    /// Stops the AI's response and immediately starts capturing the user's speech.
+    private func handleVoiceInterruption() {
+        guard isSpeaking, isContinuousMode else { return }
+
+        print("[ViewModel] Voice interruption detected — stopping TTS and starting recording")
+
+        // Reuse existing interrupt infrastructure (stops TTS, aborts gateway, saves partial response)
+        interruptCurrentResponse()
+
+        // Immediately start recording to capture the user's speech
+        Task {
+            try? await speechRecognizer.startRecording()
+            speechRecognizer.startSilenceDetection()
+            isRecording = true
+        }
+    }
+
     /// Save a partial streaming response with a cancellation marker.
     private func finalizeCancelledStreamingMessage(marker: String) {
         if var partialMessage = streamingMessage, !partialMessage.text.isEmpty {

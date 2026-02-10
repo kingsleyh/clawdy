@@ -99,6 +99,13 @@ class BackgroundAudioManager: ObservableObject {
             )
             try session.setActive(true)
 
+            // Request hardware echo-cancelled mic input (iPhone 16+, iOS 18.2+).
+            // Complements AVAudioEngine voice processing for additional AEC quality.
+            if #available(iOS 18.2, *), session.isEchoCancelledInputAvailable {
+                try? session.setPrefersEchoCancelledInput(true)
+                print("[BackgroundAudioManager] Echo-cancelled input enabled")
+            }
+
             print("[BackgroundAudioManager] Activated background voice session (playAndRecord, duckOthers)")
         } catch {
             print("[BackgroundAudioManager] Failed to activate background audio session: \(error)")

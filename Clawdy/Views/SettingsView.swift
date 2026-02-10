@@ -179,10 +179,19 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(voiceSettings.settings.ttsEngine == .kokoro && kokoroTTS.state != .ready)
+
+                    Toggle("Voice Interruption", isOn: Binding(
+                        get: { voiceSettings.settings.isVoiceInterruptionEnabled },
+                        set: { voiceSettings.settings.voiceInterruptionEnabled = $0 }
+                    ))
                 } header: {
                     Text("Voice")
                 } footer: {
-                    Text("Adjust how Claude speaks responses back to you")
+                    if voiceSettings.settings.isVoiceInterruptionEnabled {
+                        Text("Voice interruption enabled — speaking will automatically stop AI playback in continuous voice mode")
+                    } else {
+                        Text("Adjust how Claude speaks responses back to you")
+                    }
                 }
 
                 // Thinking Level

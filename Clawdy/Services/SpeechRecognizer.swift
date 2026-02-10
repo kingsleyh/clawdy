@@ -2,6 +2,17 @@ import Foundation
 import Speech
 import AVFoundation
 
+// MARK: - Thread-safe interruption detection state
+// Accessed from both the audio render thread (tap callback) and main thread.
+// Uses NSLock for safe cross-thread access, following BackgroundAudioManager's pattern.
+private let _interruptionLock = NSLock()
+private var _isMonitoringForInterruption = false
+private var _consecutiveActiveFrames = 0
+private let _interruptionEnergyThreshold: Float = -30  // dB, low threshold — AEC removes TTS echo
+private let _requiredConsecutiveFrames = 4              // ~85ms at 1024 samples / 48kHz
+private var _monitoringStartTime: UInt64 = 0            // mach_absolute_time when monitoring started
+private let _monitoringGracePeriodNs: UInt64 = 300_000_000 // 300ms grace period for VP to stabilize
+
 enum SpeechRecognizerError: LocalizedError {
     case notAuthorized
     case notAvailable
@@ -52,6 +63,12 @@ class SpeechRecognizer: ObservableObject {
     /// stop/restart the speech recognition task.
     var keepEngineRunning = false
 
+    /// Called when voice activity is detected during TTS playback (interruption).
+    var onSpeechInterruptionDetected: (() -> Void)?
+
+    /// Whether voice processing (echo cancellation) is currently enabled on the engine.
+    private var voiceProcessingEnabled = false
+
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         checkAuthorization()
@@ -98,6 +115,10 @@ class SpeechRecognizer: ObservableObject {
                         options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
                     )
                     try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+                }
+                // Enable hardware echo cancellation for voice interruption support
+                if #available(iOS 18.2, *), audioSession.isEchoCancelledInputAvailable {
+                    try? audioSession.setPrefersEchoCancelledInput(true)
                 }
             } catch {
                 throw SpeechRecognizerError.audioSessionError(error)
@@ -148,10 +169,38 @@ class SpeechRecognizer: ObservableObject {
         if !engineAlreadyRunning {
             let inputNode = audioEngine.inputNode
             inputNode.removeTap(onBus: 0) // Remove any existing tap to avoid duplicate tap crash
+
+            // Enable voice processing for echo cancellation when barge-in is enabled
+            // AND output is through built-in speaker (not Bluetooth).
+            // VP may force HFP on Bluetooth (mono phone-call quality), which breaks
+            // A2DP car media speaker routing. Skip VP on Bluetooth — AEC isn't needed
+            // there anyway since TTS goes to car speakers far from the phone mic.
+            if VoiceSettingsManager.shared.settings.isVoiceInterruptionEnabled && !voiceProcessingEnabled {
+                let route = AVAudioSession.sharedInstance().currentRoute
+                let isBluetoothOutput = route.outputs.contains {
+                    $0.portType == .bluetoothA2DP || $0.portType == .bluetoothLE || $0.portType == .bluetoothHFP
+                }
+                if !isBluetoothOutput {
+                    do {
+                        try inputNode.setVoiceProcessingEnabled(true)
+                        voiceProcessingEnabled = true
+                        print("[SpeechRecognizer] Voice processing enabled (AEC active, built-in speaker)")
+                    } catch {
+                        print("[SpeechRecognizer] Failed to enable voice processing: \(error)")
+                    }
+                } else {
+                    print("[SpeechRecognizer] Bluetooth output detected — skipping VP (AEC not needed)")
+                }
+            }
+
+            // Get format AFTER VP enabled — VP may change the input node's format
             let recordingFormat = inputNode.outputFormat(forBus: 0)
 
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-                self.recognitionRequest?.append(buffer)
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+                self?.recognitionRequest?.append(buffer)
+
+                // VAD: check for user speech during TTS playback
+                self?.processBufferForInterruption(buffer)
             }
 
             audioEngine.prepare()
@@ -239,6 +288,46 @@ class SpeechRecognizer: ObservableObject {
             audioEngine.inputNode.removeTap(onBus: 0)
             audioEngine.reset()
         }
+        voiceProcessingEnabled = false
+    }
+
+    /// Enable or disable voice processing (echo cancellation) at runtime.
+    /// Skips enabling VP when Bluetooth is connected (preserves A2DP routing).
+    /// Requires stopping and restarting the engine if it's running.
+    func setVoiceProcessing(enabled: Bool) {
+        // When enabling, check Bluetooth route — skip VP to preserve A2DP
+        if enabled {
+            let route = AVAudioSession.sharedInstance().currentRoute
+            let isBluetoothOutput = route.outputs.contains {
+                $0.portType == .bluetoothA2DP || $0.portType == .bluetoothLE || $0.portType == .bluetoothHFP
+            }
+            if isBluetoothOutput {
+                print("[SpeechRecognizer] Bluetooth output — skipping VP enable")
+                return
+            }
+        }
+        guard enabled != voiceProcessingEnabled else { return }
+        let wasRunning = audioEngine.isRunning
+        if wasRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+        }
+        do {
+            try audioEngine.inputNode.setVoiceProcessingEnabled(enabled)
+            voiceProcessingEnabled = enabled
+            print("[SpeechRecognizer] Voice processing \(enabled ? "enabled" : "disabled")")
+        } catch {
+            print("[SpeechRecognizer] Failed to set voice processing: \(error)")
+        }
+        if wasRunning {
+            let recordingFormat = audioEngine.inputNode.outputFormat(forBus: 0)
+            audioEngine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+                self?.recognitionRequest?.append(buffer)
+                self?.processBufferForInterruption(buffer)
+            }
+            audioEngine.prepare()
+            try? audioEngine.start()
+        }
     }
 
     // MARK: - Silence Detection
@@ -267,5 +356,98 @@ class SpeechRecognizer: ObservableObject {
     func startSilenceDetection() {
         lastTranscriptionTime = Date()
         resetSilenceTimer()
+    }
+
+    // MARK: - Voice Interruption Detection
+
+    /// Start monitoring the mic tap for speech energy (used during TTS playback).
+    /// With voice processing enabled, the mic signal is echo-cancelled (TTS audio subtracted).
+    /// Safe to call multiple times — if already monitoring, this is a no-op.
+    nonisolated func startInterruptionMonitoring() {
+        _interruptionLock.lock()
+        if _isMonitoringForInterruption {
+            _interruptionLock.unlock()
+            return
+        }
+        _consecutiveActiveFrames = 0
+        _monitoringStartTime = mach_absolute_time()
+        _isMonitoringForInterruption = true
+        _interruptionLock.unlock()
+        print("[SpeechRecognizer] Interruption monitoring started")
+    }
+
+    /// Stop monitoring for speech interruption.
+    nonisolated func stopInterruptionMonitoring() {
+        _interruptionLock.lock()
+        _isMonitoringForInterruption = false
+        _consecutiveActiveFrames = 0
+        _interruptionLock.unlock()
+    }
+
+    /// Whether interruption monitoring is currently active.
+    nonisolated var isInterruptionMonitoringActive: Bool {
+        _interruptionLock.lock()
+        let active = _isMonitoringForInterruption
+        _interruptionLock.unlock()
+        return active
+    }
+
+    /// Calculate RMS energy and detect sustained speech above threshold.
+    /// Runs on the audio render thread — dispatches callback to main.
+    /// With voice processing enabled, the buffer contains echo-cancelled audio
+    /// (TTS output subtracted), so energy detection is reliable.
+    private nonisolated func processBufferForInterruption(_ buffer: AVAudioPCMBuffer) {
+        _interruptionLock.lock()
+        guard _isMonitoringForInterruption else {
+            _interruptionLock.unlock()
+            return
+        }
+
+        // Short grace period for voice processing to stabilize after monitoring starts
+        let elapsed = mach_absolute_time() - _monitoringStartTime
+        var timebaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timebaseInfo)
+        let elapsedNs = elapsed * UInt64(timebaseInfo.numer) / UInt64(timebaseInfo.denom)
+        if elapsedNs < _monitoringGracePeriodNs {
+            _interruptionLock.unlock()
+            return
+        }
+        _interruptionLock.unlock()
+
+        guard let channelData = buffer.floatChannelData else { return }
+        let frameLength = Int(buffer.frameLength)
+
+        var sum: Float = 0
+        for i in 0..<frameLength {
+            sum += channelData[0][i] * channelData[0][i]
+        }
+        let rms = sqrt(sum / Float(frameLength))
+        let db = 20 * log10(max(rms, 1e-10))
+
+        _interruptionLock.lock()
+        guard _isMonitoringForInterruption else {
+            _interruptionLock.unlock()
+            return
+        }
+
+        if db > _interruptionEnergyThreshold {
+            // Fast attack: speech energy detected
+            _consecutiveActiveFrames = min(_consecutiveActiveFrames + 2, _requiredConsecutiveFrames + 4)
+            if _consecutiveActiveFrames >= _requiredConsecutiveFrames {
+                _isMonitoringForInterruption = false
+                _consecutiveActiveFrames = 0
+                _interruptionLock.unlock()
+
+                print("[SpeechRecognizer] Speech interruption detected (energy: \(String(format: "%.1f", db)) dB)")
+                DispatchQueue.main.async { [weak self] in
+                    self?.onSpeechInterruptionDetected?()
+                }
+                return
+            }
+        } else {
+            // Slow decay: speech has natural energy dips between syllables
+            _consecutiveActiveFrames = max(0, _consecutiveActiveFrames - 1)
+        }
+        _interruptionLock.unlock()
     }
 }
