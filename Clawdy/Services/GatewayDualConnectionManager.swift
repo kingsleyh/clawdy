@@ -1183,7 +1183,7 @@ class GatewayDualConnectionManager: ObservableObject {
             switch state {
             case "delta":
                 if let text = extractText(from: message) {
-                    return .textDelta(text: text, seq: seq)
+                    return .textState(text: text, seq: seq)
                 }
             case "final":
                 let text = extractText(from: message)

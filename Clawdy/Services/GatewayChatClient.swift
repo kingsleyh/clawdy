@@ -158,8 +158,12 @@ actor GatewayChatClient {
 /// Events received from the gateway's chat streaming.
 /// These map to the ClawdbotChatEventPayload structure.
 enum GatewayChatEvent: Sendable {
-    /// Text delta from streaming response
+    /// Incremental text token from streaming response (type:"textDelta")
     case textDelta(text: String, seq: Int?)
+
+    /// Full accumulated text state from streaming response (state:"delta").
+    /// Contains the entire message text so far, not just the new part.
+    case textState(text: String, seq: Int?)
 
     /// Thinking text delta
     case thinkingDelta(text: String, seq: Int?)
@@ -224,7 +228,7 @@ struct GatewayChatEventParser {
         switch state {
         case "delta":
             guard let text = extractText(from: message) else { return nil }
-            return .textDelta(text: text, seq: seq)
+            return .textState(text: text, seq: seq)
 
         case "final":
             let text = extractText(from: message)

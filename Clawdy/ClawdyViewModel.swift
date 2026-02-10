@@ -381,6 +381,9 @@ class ClawdyViewModel: ObservableObject {
     
     /// Suppress gateway finalization after a user-initiated cancel/interrupt
     private var suppressGatewayFinalization = false
+
+    /// Task handle for delayed history load (cancellable to prevent race conditions)
+    private var historyLoadTask: Task<Void, Never>?
     
     /// Incremental TTS manager for streaming speech
     private let incrementalTTS = IncrementalTTSManager()
@@ -1170,6 +1173,8 @@ class ClawdyViewModel: ObservableObject {
         finalizeCancelledStreamingMessage(marker: "[interrupted]")
         
         // 6.4: Abort generation via gateway client
+        historyLoadTask?.cancel()
+        historyLoadTask = nil
         suppressGatewayFinalization = true
         gatewayFullText = ""
         ttsSentUpToIndex = 0
@@ -1236,6 +1241,8 @@ class ClawdyViewModel: ObservableObject {
             print("[ViewModel] Gateway history received: \(payload.messages.count) messages for session \(payload.sessionKey)")
             let historyMessages = mapGatewayHistoryMessages(payload.messages)
             print("[ViewModel] Mapped to \(historyMessages.count) transcript messages")
+            // Check cancellation before modifying state — a new response may have started
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 // Clear any streaming state before replacing messages with history
                 // This prevents duplicate messages when history includes content that was streaming
@@ -1484,8 +1491,15 @@ class ClawdyViewModel: ObservableObject {
     }
 
     /// Normalize whitespace for loose string comparisons.
+    /// Also inserts a space after sentence-ending punctuation directly followed by a letter,
+    /// so "check.Here" and "check.\n\nHere" both normalize to "check. Here".
     private func normalizeWhitespace(_ text: String) -> String {
-        text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        let spaced = text.replacingOccurrences(
+            of: #"([.!?])([A-Za-z])"#,
+            with: "$1 $2",
+            options: .regularExpression
+        )
+        return spaced.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
     
     // MARK: - Heartbeat Message Filtering
@@ -1537,100 +1551,47 @@ class ClawdyViewModel: ObservableObject {
         guard !suppressGatewayFinalization else { return }
         
         switch event {
-        case .textDelta(let text, let seq):
+        case .textState(let text, let seq):
+            // Full accumulated text from state:"delta" — always REPLACE gatewayFullText.
+            // Use ttsSentUpToIndex to extract only the genuinely new portion for TTS.
             guard shouldProcessGatewaySeq(seq) else { return }
             if text.isEmpty { return }
-
-            // Track if this could be a heartbeat response (suppress TTS until we know)
             let shouldSuppressTTS = couldBeHeartbeatResponse(text)
-            
-            if gatewayFullText.isEmpty {
-                gatewayFullText = text
-                if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                    incrementalTTS.appendText(text)
-                    ttsSentUpToIndex = text.count
-                }
-            } else if text == gatewayFullText {
-                return
-            } else {
-                let normalizedIncoming = normalizeWhitespace(text)
-                let normalizedCurrent = normalizeWhitespace(gatewayFullText)
 
-                if text.count >= gatewayFullText.count && normalizedIncoming.contains(normalizedCurrent) {
-                    if text.hasPrefix(gatewayFullText) {
-                        // Exact prefix match — extract only the new suffix
-                        let suffix = text.dropFirst(gatewayFullText.count)
-                        if !suffix.isEmpty, inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                            incrementalTTS.appendText(String(suffix))
-                            ttsSentUpToIndex = text.count
-                        }
-                    } else {
-                        // Normalized match but not exact prefix (whitespace differences).
-                        // This is full accumulated text — use ttsSentUpToIndex for delta.
-                        print("[TTS] Normalized match, using ttsSentUpToIndex (\(ttsSentUpToIndex)) to extract delta from text (\(text.count) chars)")
-                        if text.count > ttsSentUpToIndex, inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                            let newContent = String(text.dropFirst(ttsSentUpToIndex))
-                            if !newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                incrementalTTS.appendText(newContent)
-                                ttsSentUpToIndex = text.count
-                            }
-                        }
-                    }
-                    gatewayFullText = text
-                } else if normalizedCurrent.contains(normalizedIncoming) {
-                    return
-                } else if text.hasPrefix(gatewayFullText) {
-                    let suffix = text.dropFirst(gatewayFullText.count)
-                    if !suffix.isEmpty {
-                        gatewayFullText += suffix
-                        if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                            incrementalTTS.appendText(String(suffix))
-                            ttsSentUpToIndex = gatewayFullText.count
-                        }
-                    }
-                } else {
-                    // Fallback: text doesn't prefix-match gatewayFullText.
-                    // Two scenarios:
-                    // (a) Gateway re-sent full accumulated text (state:"delta" format)
-                    //     after a tool call — text is >= gatewayFullText length.
-                    //     Must REPLACE gatewayFullText, not append.
-                    // (b) True small delta that doesn't match — append it.
-                    let isLikelyFullAccumulated = text.count >= gatewayFullText.count
+            gatewayFullText = text  // Always REPLACE with canonical accumulated text
 
-                    if isLikelyFullAccumulated {
-                        // REPLACE — gateway sent full accumulated text
-                        print("[TTS] Fallback REPLACE: incoming (\(text.count) chars) >= current (\(gatewayFullText.count) chars), ttsSentUpToIndex=\(ttsSentUpToIndex)")
-                        let previousIndex = ttsSentUpToIndex
-                        gatewayFullText = text  // REPLACE, not append
-                        if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                            if text.count > previousIndex {
-                                let newContent = String(text.dropFirst(previousIndex))
-                                if !newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    incrementalTTS.appendText(newContent)
-                                    ttsSentUpToIndex = text.count
-                                }
-                            }
-                        }
-                    } else {
-                        // True small delta — append
-                        print("[TTS] Fallback APPEND: incoming (\(text.count) chars) < current (\(gatewayFullText.count) chars)")
-                        gatewayFullText += text
-                        if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
-                            incrementalTTS.appendText(text)
-                            ttsSentUpToIndex = gatewayFullText.count
-                        }
+            if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
+                if text.count > ttsSentUpToIndex {
+                    let newContent = String(text.dropFirst(ttsSentUpToIndex))
+                    if !newContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        incrementalTTS.appendText(newContent)
+                        ttsSentUpToIndex = text.count
                     }
                 }
             }
-            
-            // Don't update UI for potential heartbeat responses
-            if shouldSuppressTTS {
-                return
-            }
-            
+
+            if shouldSuppressTTS { return }
             streamingResponseText = gatewayFullText
             processingState = .responding
-            
+            ensureGatewayStreamingMessage()
+            streamingMessage?.text = gatewayFullText
+
+        case .textDelta(let text, let seq):
+            // Incremental token from type:"textDelta" — APPEND to gatewayFullText.
+            guard shouldProcessGatewaySeq(seq) else { return }
+            if text.isEmpty { return }
+            let shouldSuppressTTS = couldBeHeartbeatResponse(text)
+
+            gatewayFullText += text
+
+            if inputMode == .voice && !isGatewayToolExecuting && !shouldSuppressTTS {
+                incrementalTTS.appendText(text)
+                ttsSentUpToIndex = gatewayFullText.count
+            }
+
+            if shouldSuppressTTS { return }
+            streamingResponseText = gatewayFullText
+            processingState = .responding
             ensureGatewayStreamingMessage()
             streamingMessage?.text = gatewayFullText
             
@@ -1655,7 +1616,18 @@ class ClawdyViewModel: ObservableObject {
         case .toolCallEnd(let name, let toolId, let result):
             processingState = .responding
             isGatewayToolExecuting = false
-            
+
+            // Send any text that accumulated during tool execution but wasn't sent to TTS.
+            // During tool execution, gatewayFullText is updated by incoming deltas but
+            // ttsSentUpToIndex is not (TTS is suppressed). Close this gap now.
+            if gatewayFullText.count > ttsSentUpToIndex && inputMode == .voice {
+                let unsent = String(gatewayFullText.dropFirst(ttsSentUpToIndex))
+                if !unsent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    incrementalTTS.appendText(unsent)
+                    ttsSentUpToIndex = gatewayFullText.count
+                }
+            }
+
             let matchingIndex = streamingMessage?.toolCalls.firstIndex(where: { call in
                 if let toolId = toolId, let uuid = UUID(uuidString: toolId) {
                     return call.id == uuid && !call.isComplete
@@ -1720,8 +1692,12 @@ class ClawdyViewModel: ObservableObject {
             // Reload history after a brief delay to sync any messages added during the run
             // (e.g., tool outputs, injected messages, or other async additions).
             // The delay ensures finalization completes before history replaces messages.
-            Task {
+            // Stored as cancellable task to prevent race condition: if a new response
+            // starts before 0.5s, the history load would reset ttsSentUpToIndex mid-stream.
+            historyLoadTask?.cancel()
+            historyLoadTask = Task {
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+                guard !Task.isCancelled else { return }
                 await loadGatewayHistory()
             }
             
@@ -1825,6 +1801,11 @@ class ClawdyViewModel: ObservableObject {
             }
         }
         
+        // Cancel any pending history load from the previous response to prevent
+        // it from resetting ttsSentUpToIndex mid-stream (race condition)
+        historyLoadTask?.cancel()
+        historyLoadTask = nil
+
         // Reset state for new response
         suppressGatewayFinalization = false
         streamingResponseText = ""
@@ -1941,6 +1922,8 @@ class ClawdyViewModel: ObservableObject {
             finalizeCancelledStreamingMessage(marker: "[Response cancelled]")
             
             // Send abort signal to the gateway
+            historyLoadTask?.cancel()
+            historyLoadTask = nil
             suppressGatewayFinalization = true
             gatewayFullText = ""
             ttsSentUpToIndex = 0

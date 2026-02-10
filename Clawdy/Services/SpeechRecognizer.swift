@@ -172,9 +172,11 @@ class SpeechRecognizer: ObservableObject {
 
             // Enable voice processing for echo cancellation when barge-in is enabled
             // AND output is through built-in speaker (not Bluetooth).
+            // VP causes "render err: -1" log noise from Apple's VPIO audio unit when
+            // TTS engines run on separate AVAudioEngine instances — this is harmless
+            // (AEC still works) but cannot be suppressed from app code.
             // VP may force HFP on Bluetooth (mono phone-call quality), which breaks
-            // A2DP car media speaker routing. Skip VP on Bluetooth — AEC isn't needed
-            // there anyway since TTS goes to car speakers far from the phone mic.
+            // A2DP car media speaker routing. Skip VP on Bluetooth.
             if VoiceSettingsManager.shared.settings.isVoiceInterruptionEnabled && !voiceProcessingEnabled {
                 let route = AVAudioSession.sharedInstance().currentRoute
                 let isBluetoothOutput = route.outputs.contains {
@@ -184,12 +186,12 @@ class SpeechRecognizer: ObservableObject {
                     do {
                         try inputNode.setVoiceProcessingEnabled(true)
                         voiceProcessingEnabled = true
-                        print("[SpeechRecognizer] Voice processing enabled (AEC active, built-in speaker)")
+                        print("[SpeechRecognizer] Voice processing enabled (AEC active)")
                     } catch {
                         print("[SpeechRecognizer] Failed to enable voice processing: \(error)")
                     }
                 } else {
-                    print("[SpeechRecognizer] Bluetooth output detected — skipping VP (AEC not needed)")
+                    print("[SpeechRecognizer] Bluetooth output — skipping VP")
                 }
             }
 
@@ -293,18 +295,13 @@ class SpeechRecognizer: ObservableObject {
 
     /// Enable or disable voice processing (echo cancellation) at runtime.
     /// Skips enabling VP when Bluetooth is connected (preserves A2DP routing).
-    /// Requires stopping and restarting the engine if it's running.
     func setVoiceProcessing(enabled: Bool) {
-        // When enabling, check Bluetooth route — skip VP to preserve A2DP
         if enabled {
             let route = AVAudioSession.sharedInstance().currentRoute
             let isBluetoothOutput = route.outputs.contains {
                 $0.portType == .bluetoothA2DP || $0.portType == .bluetoothLE || $0.portType == .bluetoothHFP
             }
-            if isBluetoothOutput {
-                print("[SpeechRecognizer] Bluetooth output — skipping VP enable")
-                return
-            }
+            if isBluetoothOutput { return }
         }
         guard enabled != voiceProcessingEnabled else { return }
         let wasRunning = audioEngine.isRunning
@@ -315,7 +312,6 @@ class SpeechRecognizer: ObservableObject {
         do {
             try audioEngine.inputNode.setVoiceProcessingEnabled(enabled)
             voiceProcessingEnabled = enabled
-            print("[SpeechRecognizer] Voice processing \(enabled ? "enabled" : "disabled")")
         } catch {
             print("[SpeechRecognizer] Failed to set voice processing: \(error)")
         }
