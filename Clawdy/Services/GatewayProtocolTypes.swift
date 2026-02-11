@@ -7,7 +7,7 @@ import Foundation
 
 let GATEWAY_PROTOCOL_VERSION = 3
 let GATEWAY_WS_PORT = 18789
-let GATEWAY_CLIENT_ID = "moltbot-ios"  // Must match GATEWAY_CLIENT_IDS in clawdbot gateway
+let GATEWAY_CLIENT_ID = "openclaw-ios"  // Must match GATEWAY_CLIENT_IDS in gateway config
 let GATEWAY_CLIENT_MODE = "node"
 
 // MARK: - App Lifecycle Phase
@@ -121,7 +121,7 @@ public struct GatewayConnectOptions: Sendable {
         caps: [String] = [],
         commands: [String] = [],
         permissions: [String: Bool] = [:],
-        clientId: String = "moltbot-ios",
+        clientId: String = "openclaw-ios",
         clientMode: String = "node",
         clientDisplayName: String? = nil
     ) {
@@ -140,7 +140,6 @@ public struct GatewayConnectOptions: Sendable {
     /// Create connection options for the operator role.
     ///
     /// Operator connections are used for chat operations (send/receive messages, history).
-    /// Required scopes: `operator.read` (for chat.history), `operator.write` (for chat.send).
     ///
     /// - Parameter displayName: Optional custom display name for the client.
     /// - Returns: Pre-configured options for an operator connection.
@@ -151,7 +150,7 @@ public struct GatewayConnectOptions: Sendable {
             caps: [],
             commands: [],
             permissions: [:],
-            clientId: "moltbot-ios",
+            clientId: "openclaw-ios",
             clientMode: "ui",
             clientDisplayName: displayName
         )
@@ -162,17 +161,12 @@ public struct GatewayConnectOptions: Sendable {
     /// Node connections are used for capability invokes (camera, location, etc.).
     /// Nodes advertise their capabilities and handle invoke requests.
     ///
-    /// Note: We request the same scopes as operator to avoid scope-upgrade pairing
-    /// requirements when both roles connect. The gateway merges scopes on pairing
-    /// approval, but checks them on every connect - requesting consistent scopes
-    /// ensures a single pairing approval covers both connection roles.
-    ///
     /// - Parameter displayName: Optional custom display name for the client.
     /// - Returns: Pre-configured options for a node connection.
     public static func forNode(displayName: String? = nil) -> GatewayConnectOptions {
         GatewayConnectOptions(
             role: "node",
-            scopes: ["operator.read", "operator.write"],
+            scopes: [],
             caps: ["camera", "location", "voice"],
             commands: [
                 "camera.snap",
@@ -182,7 +176,7 @@ public struct GatewayConnectOptions: Sendable {
                 "system.notify"
             ],
             permissions: ["camera.capture": true],
-            clientId: "moltbot-ios",
+            clientId: "openclaw-ios",
             clientMode: "node",
             clientDisplayName: displayName
         )

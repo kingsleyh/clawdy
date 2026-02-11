@@ -264,6 +264,11 @@ class ClawdyViewModel: ObservableObject {
     @Published var isRecording = false
     @Published var isSpeaking = false
     @Published var isGeneratingAudio = false
+    @Published var isContinuousMode = false {
+        didSet {
+            UserDefaults.standard.set(isContinuousMode, forKey: "com.clawdy.continuousMode")
+        }
+    }
     @Published var connectionStatus: ConnectionStatus = .disconnected(reason: "Not connected") {
         didSet {
             handleConnectionStatusChange(from: oldValue, to: connectionStatus)
@@ -275,7 +280,14 @@ class ClawdyViewModel: ObservableObject {
     @Published var messages: [TranscriptMessage] = []
     @Published var currentTranscription = ""
     /// Current processing state for UI indicators (thinking, tool use, etc.)
-    @Published var processingState: ProcessingState = .idle
+    @Published var processingState: ProcessingState = .idle {
+        didSet {
+            // Auto-restart recording when processing finishes in continuous mode (fallback for no TTS)
+            if oldValue.isActive && !processingState.isActive && isContinuousMode && !isRecording && !isSpeaking {
+                restartRecordingForContinuousMode()
+            }
+        }
+    }
     
     /// Current streaming response text (updated incrementally)
     @Published var streamingResponseText = ""
@@ -372,17 +384,83 @@ class ClawdyViewModel: ObservableObject {
     }
 
     init() {
+        // Set session key from saved credentials BEFORE setting up bindings
+        // This ensures history loads with the correct session key
+        if let credentials = KeychainManager.shared.loadGatewayCredentials() {
+            gatewayDualConnectionManager.chatSessionKey = credentials.sessionKey
+        }
+
         loadInputMode()
         loadDraftTextInput()
+        loadContinuousMode()
         setupBindings()
+        setupContinuousMode()
         Task {
             // Prune old messages on app launch (removes messages older than 7 days)
             await MessagePersistenceManager.shared.pruneOldMessages()
-            
+
             // Load persisted messages to populate the transcript view
             let persistedMessages = await MessagePersistenceManager.shared.loadMessages()
             await MainActor.run {
                 self.messages = persistedMessages
+            }
+        }
+    }
+
+    private func loadContinuousMode() {
+        isContinuousMode = UserDefaults.standard.bool(forKey: "com.clawdy.continuousMode")
+    }
+
+    private func setupContinuousMode() {
+        // Set up silence detection callback for continuous mode
+        speechRecognizer.onSilenceDetected = { [weak self] in
+            guard let self = self, self.isContinuousMode, self.isRecording else { return }
+            self.stopRecordingAndSend()
+        }
+
+        // Set up timeout restart callback (handles Apple's 60s limit)
+        speechRecognizer.onTimeoutRestart = { [weak self] in
+            guard let self = self, self.isContinuousMode else { return }
+            print("[ContinuousMode] Recognition timeout - restarting")
+            self.restartRecordingWithRecovery()
+        }
+    }
+
+    /// Restart recording with error recovery and exponential backoff
+    private func restartRecordingWithRecovery(retryCount: Int = 0) {
+        let maxRetries = 3
+        let baseDelay: TimeInterval = 0.3
+
+        guard retryCount < maxRetries else {
+            print("[ContinuousMode] Max retries reached, stopping continuous mode")
+            isContinuousMode = false
+            return
+        }
+
+        let delay = baseDelay * pow(2.0, Double(retryCount))
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self = self else { return }
+            guard self.isContinuousMode else { return }
+            guard !self.isRecording else { return }
+            guard !self.isSpeaking else { return }
+
+            Task {
+                do {
+                    try await self.speechRecognizer.startRecording()
+                    await MainActor.run {
+                        self.isRecording = true
+                        if self.isContinuousMode {
+                            self.speechRecognizer.startSilenceDetection()
+                        }
+                    }
+                    print("[ContinuousMode] Recording restarted successfully")
+                } catch {
+                    print("[ContinuousMode] Restart failed (attempt \(retryCount + 1)): \(error)")
+                    await MainActor.run {
+                        self.restartRecordingWithRecovery(retryCount: retryCount + 1)
+                    }
+                }
             }
         }
     }
@@ -399,7 +477,14 @@ class ClawdyViewModel: ObservableObject {
         incrementalTTS.$isSpeaking
             .receive(on: DispatchQueue.main)
             .sink { [weak self] speaking in
-                self?.isSpeaking = speaking
+                guard let self = self else { return }
+                let wasSpeaking = self.isSpeaking
+                self.isSpeaking = speaking
+
+                // Auto-restart recording when TTS finishes in continuous mode
+                if wasSpeaking && !speaking && self.isContinuousMode {
+                    self.restartRecordingForContinuousMode()
+                }
             }
             .store(in: &cancellables)
         
@@ -555,6 +640,10 @@ class ClawdyViewModel: ObservableObject {
             do {
                 try await speechRecognizer.startRecording()
                 isRecording = true
+                // Start silence detection timer in continuous mode
+                if isContinuousMode {
+                    speechRecognizer.startSilenceDetection()
+                }
             } catch {
                 addMessage("Error starting recording: \(error.localizedDescription)", isUser: false)
             }
@@ -566,6 +655,15 @@ class ClawdyViewModel: ObservableObject {
         let transcription = speechRecognizer.stopRecording()
 
         guard !transcription.isEmpty else {
+            // In continuous mode, silently restart without error message
+            if isContinuousMode {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if self.isContinuousMode && !self.isRecording && !self.isSpeaking {
+                        self.startRecording()
+                    }
+                }
+                return
+            }
             addMessage("No speech detected. Please try again.", isUser: false)
             return
         }
@@ -573,7 +671,77 @@ class ClawdyViewModel: ObservableObject {
         addMessage(transcription, isUser: true)
         sendCommand(transcription)
     }
-    
+
+    /// Called by silence detection in continuous mode
+    private func stopRecordingAndSend() {
+        guard isRecording else { return }
+        isRecording = false
+        let transcription = speechRecognizer.stopRecording()
+
+        guard !transcription.isEmpty else {
+            // Restart recording if no speech detected in continuous mode
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                if self.isContinuousMode && !self.isRecording && !self.isSpeaking {
+                    self.startRecording()
+                }
+            }
+            return
+        }
+
+        addMessage(transcription, isUser: true)
+        sendCommand(transcription)
+        // Recording will restart after TTS finishes via the isSpeaking observer
+    }
+
+    /// Toggle continuous conversation mode
+    func toggleContinuousMode() {
+        isContinuousMode.toggle()
+
+        if isContinuousMode {
+            // Start recording if not already recording or speaking
+            if !isRecording && !isSpeaking {
+                startRecording()
+            }
+        } else {
+            // Stop recording if currently recording
+            if isRecording {
+                isRecording = false
+                _ = speechRecognizer.stopRecording()
+            }
+        }
+    }
+
+    /// Flag to prevent multiple restart attempts
+    private var isRestartingContinuousMode = false
+
+    /// Restart recording after TTS finishes in continuous mode
+    private func restartRecordingForContinuousMode() {
+        guard !isRestartingContinuousMode else { return }
+        isRestartingContinuousMode = true
+
+        // Longer delay to ensure audio session is fully released by TTS
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self = self else { return }
+            self.isRestartingContinuousMode = false
+
+            guard self.isContinuousMode else { return }
+            guard !self.isRecording else { return }
+            guard !self.isSpeaking else { return }
+            guard !self.processingState.isActive else {
+                // Still processing, wait and try again
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if self.isContinuousMode && !self.isRecording && !self.isSpeaking && !self.processingState.isActive {
+                        self.restartRecordingForContinuousMode()
+                    }
+                }
+                return
+            }
+
+            print("[ContinuousMode] Restarting recording")
+            self.startRecording()
+        }
+    }
+
     // MARK: - Text Input
     
     /// Send the current text input as a command, with any attached images.
@@ -1367,12 +1535,22 @@ class ClawdyViewModel: ObservableObject {
                     || !normalizedFinal.hasPrefix(normalizedCurrent)
 
                 if shouldReplace {
+                    // Check if finalText has content beyond what we already sent to TTS
+                    if finalText.count > gatewayFullText.count && finalText.hasPrefix(gatewayFullText) {
+                        let missingSuffix = String(finalText.dropFirst(gatewayFullText.count))
+                        if !missingSuffix.isEmpty && inputMode == .voice && !isGatewayToolExecuting {
+                            print("[TTS] Final text has additional content: '\(missingSuffix)'")
+                            incrementalTTS.appendText(missingSuffix)
+                        }
+                    } else if gatewayFullText.isEmpty && inputMode == .voice && !isGatewayToolExecuting {
+                        // No deltas were received, send the entire final text
+                        print("[TTS] No deltas received, sending entire final text")
+                        incrementalTTS.appendText(finalText)
+                    }
                     gatewayFullText = finalText
                     streamingResponseText = finalText
                     ensureGatewayStreamingMessage()
                     streamingMessage?.text = finalText
-                    // Don't append finalText to TTS - streaming deltas already sent the text.
-                    // The flush() below will speak any remaining buffered content.
                 }
             }
             if inputMode == .voice && !isHeartbeat {
@@ -1654,6 +1832,12 @@ class ClawdyViewModel: ObservableObject {
     }
 
     func connect() async {
+        // Apply session key from settings before connecting
+        if let credentials = KeychainManager.shared.loadGatewayCredentials() {
+            gatewayDualConnectionManager.chatSessionKey = credentials.sessionKey
+            print("[ClawdyViewModel] Using session key: \(credentials.sessionKey)")
+        }
+
         // Reflect current gateway dual connection status before attempting to connect.
         let status = gatewayDualConnectionManager.status
         switch status {
@@ -1681,12 +1865,12 @@ class ClawdyViewModel: ObservableObject {
         case .pairingPendingBoth:
             connectionStatus = .pairingPending(chatStatus: .pairingPending, nodeStatus: .pairingPending)
         }
-        
+
         // Gateway mode - connect via GatewayDualConnectionManager
         // The dual connection manager handles VPN-aware auto-connect for both operator and node roles
         await gatewayDualConnectionManager.connectIfNeeded()
         // Status will be updated via the published status binding
-        
+
         // Request notification permissions on first gateway connect
         // This is needed for chat.push notifications when app is backgrounded
         Task {

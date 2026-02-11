@@ -97,17 +97,34 @@ struct ContentView: View {
             // Input area: voice mode or text mode with transition animations
             Group {
                 if viewModel.inputMode == .voice {
-                    // Voice input with mic button and keyboard toggle
+                    // Voice input with mic button, continuous mode toggle, and keyboard toggle
                     HStack(alignment: .bottom, spacing: 16) {
                         Spacer()
+
+                        // Continuous mode toggle button (positioned to the left of mic)
+                        VStack {
+                            Spacer()
+                            ContinuousModeToggleButton(
+                                isEnabled: viewModel.isContinuousMode,
+                                onTap: {
+                                    viewModel.toggleContinuousMode()
+                                }
+                            )
+                            .padding(.bottom, 8)
+                        }
+                        .frame(height: 80)
 
                         MicButtonView(
                             isRecording: viewModel.isRecording,
                             isSpeaking: viewModel.isSpeaking,
                             isGeneratingAudio: viewModel.isGeneratingAudio,
                             processingState: viewModel.processingState,
+                            isContinuousMode: viewModel.isContinuousMode,
                             onTap: {
-                                if viewModel.isRecording {
+                                if viewModel.isContinuousMode {
+                                    // In continuous mode, tapping stops the mode
+                                    viewModel.toggleContinuousMode()
+                                } else if viewModel.isRecording {
                                     viewModel.stopRecording()
                                 } else if viewModel.isSpeaking {
                                     viewModel.stopSpeaking()
@@ -783,6 +800,7 @@ struct MicButtonView: View {
     let isSpeaking: Bool
     let isGeneratingAudio: Bool
     let processingState: ProcessingState
+    var isContinuousMode: Bool = false
     let onTap: () -> Void
     let onLongPress: () -> Void
 
@@ -846,7 +864,12 @@ struct MicButtonView: View {
             .accessibilityAddTraits(.isButton)
 
             // Hint text
-            if processingState.isActive {
+            if isContinuousMode {
+                Text("Continuous mode")
+                    .font(.caption2)
+                    .foregroundColor(.cyan)
+                    .accessibilityHidden(true)
+            } else if processingState.isActive {
                 Text("Hold to cancel")
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -950,7 +973,37 @@ struct MicButtonView: View {
             return .green
         }
 
-        return isRecording ? .red : .blue
+        if isRecording {
+            return isContinuousMode ? .cyan : .red
+        }
+
+        return isContinuousMode ? .cyan : .blue
+    }
+}
+
+// MARK: - Continuous Mode Toggle Button
+
+/// Toggle button for continuous conversation mode.
+struct ContinuousModeToggleButton: View {
+    let isEnabled: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            ZStack {
+                Circle()
+                    .fill(isEnabled ? Color.cyan : Color(.tertiarySystemBackground))
+                    .frame(width: 44, height: 44)
+                    .shadow(color: isEnabled ? Color.cyan.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
+
+                Image(systemName: isEnabled ? "infinity" : "arrow.triangle.2.circlepath")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(isEnabled ? .white : .secondary)
+            }
+        }
+        .accessibilityLabel(isEnabled ? "Continuous mode enabled" : "Continuous mode disabled")
+        .accessibilityHint("Double tap to toggle continuous conversation mode")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

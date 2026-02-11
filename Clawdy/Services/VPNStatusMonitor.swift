@@ -105,10 +105,14 @@ class VPNStatusMonitor: ObservableObject {
 
     /// Update VPN status based on network path interfaces
     private func updateVPNStatus(from path: NWPath) {
+        let previousStatus = status
+
         // Check if we have network connectivity first
         guard path.status == .satisfied else {
             status = .disconnected
-            print("[VPNStatusMonitor] No network connectivity")
+            if previousStatus != .disconnected {
+                print("[VPNStatusMonitor] No network connectivity")
+            }
             return
         }
 
@@ -121,8 +125,13 @@ class VPNStatusMonitor: ObservableObject {
             // Check for common VPN interface prefixes
             for prefix in vpnInterfacePrefixes {
                 if name.hasPrefix(prefix) {
-                    status = .connected(interfaceName: formatInterfaceName(interface.name))
-                    print("[VPNStatusMonitor] VPN detected: \(interface.name)")
+                    let newStatus = VPNStatus.connected(interfaceName: formatInterfaceName(interface.name))
+                    if status != newStatus {
+                        status = newStatus
+                        print("[VPNStatusMonitor] VPN detected: \(interface.name)")
+                    } else {
+                        status = newStatus
+                    }
                     return
                 }
             }
@@ -130,16 +139,23 @@ class VPNStatusMonitor: ObservableObject {
             // Check for known VPN service patterns
             for pattern in vpnServicePatterns {
                 if name.contains(pattern) {
-                    status = .connected(interfaceName: formatInterfaceName(interface.name))
-                    print("[VPNStatusMonitor] VPN service detected: \(interface.name)")
+                    let newStatus = VPNStatus.connected(interfaceName: formatInterfaceName(interface.name))
+                    if status != newStatus {
+                        status = newStatus
+                        print("[VPNStatusMonitor] VPN service detected: \(interface.name)")
+                    } else {
+                        status = newStatus
+                    }
                     return
                 }
             }
         }
 
         // No VPN interface found
+        if status != .disconnected {
+            print("[VPNStatusMonitor] No VPN interface found. Interfaces: \(interfaces.map { $0.name })")
+        }
         status = .disconnected
-        print("[VPNStatusMonitor] No VPN interface found. Interfaces: \(interfaces.map { $0.name })")
     }
 
     /// Format interface name for display

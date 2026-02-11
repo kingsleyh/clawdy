@@ -364,8 +364,11 @@ class GatewayDualConnectionManager: ObservableObject {
         logger.info("Connecting to \(credentials.host) with dual connections")
         
         // Build WebSocket URL
+        // For TLS connections, use port 443 (standard HTTPS, used by Tailscale Serve)
+        // For non-TLS connections, use the gateway's native WebSocket port
         let scheme = credentials.useTLS ? "wss" : "ws"
-        guard let url = URL(string: "\(scheme)://\(credentials.host):\(GATEWAY_WS_PORT)") else {
+        let port = credentials.useTLS ? 443 : GATEWAY_WS_PORT
+        guard let url = URL(string: "\(scheme)://\(credentials.host):\(port)") else {
             status = .disconnected
             isConnecting = false
             logger.error("Invalid gateway URL")
@@ -375,7 +378,7 @@ class GatewayDualConnectionManager: ObservableObject {
         let sharedToken = credentials.authToken
         let deviceName = await MainActor.run { UIDevice.current.name }
         
-        // Create operator connection
+        // Create operator connection for chat operations
         let operatorOptions = GatewayConnectOptions.forOperator(displayName: deviceName)
         operatorConnection = GatewayConnection(
             url: url,
@@ -727,9 +730,21 @@ class GatewayDualConnectionManager: ObservableObject {
     }
     
     /// Handle chat events from the operator connection.
+    /// Filters events to only process those matching the configured session key.
     private func handleChatEvent(_ event: GatewayEvent) async {
+        // Filter by session key - only process events for our configured session
+        if let payload = event.payload,
+           let eventSessionKey = payload["sessionKey"] as? String {
+            if eventSessionKey != chatSessionKey {
+                // Event is for a different session, ignore it silently
+                return
+            }
+        }
+        // Note: Events without sessionKey (like tick, health) are allowed through
+        // as they are system events, not session-specific chat events
+
         guard let chatEvent = convertToChatEvent(event) else { return }
-        
+
         await MainActor.run {
             onChatEvent?(chatEvent)
         }
@@ -920,16 +935,19 @@ class GatewayDualConnectionManager: ObservableObject {
         }
         updateAuthTokenMissing(false)
 
+        // For TLS connections, use port 443 (standard HTTPS, used by Tailscale Serve)
+        // For non-TLS connections, use the gateway's native WebSocket port
         let scheme = credentials.useTLS ? "wss" : "ws"
-        guard let url = URL(string: "\(scheme)://\(credentials.host):\(GATEWAY_WS_PORT)") else {
+        let port = credentials.useTLS ? 443 : GATEWAY_WS_PORT
+        guard let url = URL(string: "\(scheme)://\(credentials.host):\(port)") else {
             throw GatewayError.connectionFailed("Invalid gateway URL")
         }
         
-        // Test with operator role (simpler, doesn't need caps)
+        // Test with operator role (chat scopes)
         let testDisplayName = await MainActor.run { "\(UIDevice.current.name) (Test)" }
         let testOptions = GatewayConnectOptions(
             role: "operator",
-            scopes: ["operator.read"],
+            scopes: ["operator.read", "operator.write"],
             caps: [],
             commands: [],
             permissions: [:],
@@ -937,7 +955,7 @@ class GatewayDualConnectionManager: ObservableObject {
             clientMode: "ui",
             clientDisplayName: testDisplayName
         )
-        
+
         let testConnection = GatewayConnection(
             url: url,
             role: .operator,

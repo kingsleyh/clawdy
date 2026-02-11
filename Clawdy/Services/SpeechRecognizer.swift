@@ -32,6 +32,18 @@ class SpeechRecognizer: ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
 
+    // Silence detection for continuous mode
+    private var silenceTimer: Timer?
+    private var lastTranscriptionTime: Date?
+    var onSilenceDetected: (() -> Void)?
+    var silenceThreshold: TimeInterval = 1.5 // seconds of silence before auto-send
+
+    // 1-minute timeout handling (Apple's limit per recognition task)
+    private var recognitionStartTime: Date?
+    private var timeoutTimer: Timer?
+    private let maxRecognitionDuration: TimeInterval = 55 // restart before 60s limit
+    var onTimeoutRestart: (() -> Void)? // callback to restart recognition
+
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         checkAuthorization()
@@ -86,7 +98,12 @@ class SpeechRecognizer: ObservableObject {
 
             if let result = result {
                 DispatchQueue.main.async {
-                    self.transcribedText = result.bestTranscription.formattedString
+                    let newText = result.bestTranscription.formattedString
+                    if newText != self.transcribedText {
+                        self.transcribedText = newText
+                        self.lastTranscriptionTime = Date()
+                        self.resetSilenceTimer()
+                    }
                 }
             }
 
@@ -108,9 +125,53 @@ class SpeechRecognizer: ObservableObject {
         try audioEngine.start()
 
         transcribedText = ""
+
+        // Start 1-minute timeout timer
+        recognitionStartTime = Date()
+        startTimeoutTimer()
+    }
+
+    // MARK: - Timeout Handling
+
+    private func startTimeoutTimer() {
+        timeoutTimer?.invalidate()
+        timeoutTimer = Timer.scheduledTimer(withTimeInterval: maxRecognitionDuration, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.handleTimeout()
+            }
+        }
+    }
+
+    private func stopTimeoutTimer() {
+        timeoutTimer?.invalidate()
+        timeoutTimer = nil
+    }
+
+    private func handleTimeout() {
+        // Recognition task is approaching 60s limit - need to restart
+        // Save current transcription
+        let currentText = transcribedText
+
+        // Stop current recognition
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionRequest = nil
+        recognitionTask = nil
+
+        // If we have text, trigger silence detection to send it
+        if !currentText.isEmpty {
+            onSilenceDetected?()
+        } else {
+            // No text, just restart
+            onTimeoutRestart?()
+        }
     }
 
     func stopRecording() -> String {
+        stopSilenceTimer()
+        stopTimeoutTimer()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
@@ -118,10 +179,39 @@ class SpeechRecognizer: ObservableObject {
 
         recognitionRequest = nil
         recognitionTask = nil
+        recognitionStartTime = nil
 
         // Deactivate audio session
         try? AVAudioSession.sharedInstance().setActive(false)
 
         return transcribedText
+    }
+
+    // MARK: - Silence Detection
+
+    private func resetSilenceTimer() {
+        silenceTimer?.invalidate()
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceThreshold, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.handleSilenceDetected()
+            }
+        }
+    }
+
+    private func stopSilenceTimer() {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+    }
+
+    private func handleSilenceDetected() {
+        // Only trigger if we have some transcribed text
+        guard !transcribedText.isEmpty else { return }
+        onSilenceDetected?()
+    }
+
+    /// Start silence detection manually (for continuous mode)
+    func startSilenceDetection() {
+        lastTranscriptionTime = Date()
+        resetSilenceTimer()
     }
 }
